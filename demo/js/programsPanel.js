@@ -67,10 +67,13 @@ export function historyText(e) {
 /**
  * @param {HTMLElement} el  drawer container (an <aside>)
  * @param {{ api: object, getContext: () => ({ settings: object, now: number, kiosk: boolean }),
- *           getMachines: () => object[], requestToken: () => Promise<string|null>, toast?: Function }} deps
+ *           getMachines: () => object[], requestToken: () => Promise<string|null>, toast?: Function, demo?: boolean }} deps
+ *   demo: the public demo (simulated Data Servers, no setup)
  */
 export function createProgramsPanel(el, deps) {
   const { api, getContext, toast = () => {} } = deps;
+  /** The public demo: simulated Data Servers in the visitor's browser, no setup. */
+  const demo = deps.demo === true;
   const st = {
     id: null, view: 'list', data: null, error: null, loading: false, menuFor: null, sending: null,
     fresh: new Set(), historyOpen: false, history: null, historyError: null, overview: null, setupError: null, loginFor: null,
@@ -442,7 +445,7 @@ export function createProgramsPanel(el, deps) {
     refreshBtn.disabled = st.loading;
     historyBtn.hidden = st.view !== 'list' || !st.id;
     setupBtn.querySelector('span').textContent = st.view === 'setup' ? 'Back to programs' : 'Setup';
-    setupBtn.hidden = st.view === 'setup' && !st.id;
+    setupBtn.hidden = demo || (st.view === 'setup' && !st.id);
     summary.textContent = listReady
       ? `${d.files.length} program${d.files.length === 1 ? '' : 's'}${st.loading ? ' · reading…' : st.linesLeft > 0 ? ` · reading previews, ${st.linesLeft} to go` : ''}`
       : (st.loading ? 'Reading the Data Server…' : '');
@@ -483,7 +486,9 @@ export function createProgramsPanel(el, deps) {
     const drop = h('div', 'prog-drop');
     drop.append(iconSvg('download', { size: null }), h('span', 'prog-drop-idle', `Drag files here from your PC to send them to ${machineName()}`), h('span', 'prog-drop-active', `Drop to send to ${machineName()}`));
     body.append(drop);
-    body.append(h('p', 'note', 'Works only on the shop network. The HUD never selects or starts a program, and never touches parameters, offsets or macros.'));
+    body.append(h('p', 'note', demo
+      ? 'Demo: this Data Server is simulated in your browser. Nothing is sent anywhere, and the programs reset when you reload. In a shop it works only on the shop network, and the HUD never selects or starts a program.'
+      : 'Works only on the shop network. The HUD never selects or starts a program, and never touches parameters, offsets or macros.'));
   }
 
   function fileRow(f) {
@@ -796,7 +801,7 @@ export function createProgramsPanel(el, deps) {
       document.addEventListener('click', onDocClick, true);
       document.addEventListener('dragover', blockStrayDrop);
       document.addEventListener('drop', blockStrayDrop);
-      if (view === 'setup' || !st.id) showSetup(); else showList();
+      if (!demo && (view === 'setup' || !st.id)) showSetup(); else showList();
       renderHistory();
       close.focus({ preventScroll: true });
     },

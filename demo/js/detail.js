@@ -51,7 +51,7 @@ function dl(pairs) {
  * @param {HTMLElement} el  drawer container (an <aside>)
  * @param {{ api: object, getMachine: (id: string) => ({ vm: object, snapshot: object|null, layoutMachine: object|null }|null),
  *           getContext: () => ({ settings: object, now: number, theme: string, kiosk: boolean }),
- *           onClose?: Function, toast?: Function, readOnly?: () => boolean, onRunReport?: (id: string) => void,
+ *           onClose?: Function, toast?: Function, readOnly?: () => boolean, programsMode?: () => 'full'|'use'|'off', onRunReport?: (id: string) => void,
  *           onPrograms?: (id: string, opts?: { view?: 'list'|'setup' }) => void }} deps
  */
 export function createDetail(el, deps) {
@@ -157,12 +157,16 @@ export function createDetail(el, deps) {
     return s;
   }
 
-  /** Programs (D16): open the machine's Data Server explorer, or set transfer up (FANUC machines, editors only). */
+  /**
+   * Programs (D16): open the machine's Data Server explorer, or set transfer up (FANUC machines, editors only).
+   * deps.programsMode(): 'full' (default), 'use' (the explorer, never setup: the public demo) or 'off'.
+   */
   function programsSection(ctx, lm) {
-    if (!deps.onPrograms || ctx.kiosk || deps.readOnly?.()) return null;
+    const mode = deps.programsMode?.() ?? (deps.readOnly?.() ? 'off' : 'full');
+    if (!deps.onPrograms || ctx.kiosk || mode === 'off') return null;
     const p = ctx.settings?.programs;
     const on = !!(p?.enabled && p.machines?.[currentId]?.enabled);
-    if (!on && lm?.source?.protocol !== 'focas') return null;
+    if (!on && (mode !== 'full' || lm?.source?.protocol !== 'focas')) return null;
     const s = h('section', 'd-section programs-section');
     s.append(h('h3', null, 'Programs'));
     s.append(h('p', 'muted', on ? 'Send, download and delete programs on this machine\u2019s Data Server.' : 'Program transfer is not set up for this machine.'));

@@ -27,7 +27,8 @@ const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 const url = readUrlOptions(location.search);
 // The public demo (stacklight.shop/demo, built by scripts/demo-site.mjs) marks its page <html data-demo="1">: a
-// simulated shop replayed in the browser, so nothing can be edited, discovered or changed there.
+// simulated shop replayed in the browser. The layout editor and program transfer work there against the visitor's
+// own browser; discovery, out-of-service and run invalidation are off.
 const DEMO = document.documentElement.dataset.demo === '1';
 // Script errors, rejected promises, disconnects and reloads go to the server log (D13); first thing, to catch boot errors.
 const reporter = createErrorReporter({
@@ -158,9 +159,9 @@ function isPreview() {
   return !!(url.layout && state.activeLayout && url.layout !== state.activeLayout);
 }
 function canEdit() {
-  return !DEMO && !!state.profile && !state.profile.kiosk && !isPreview() && !smallScreen();
+  return !!state.profile && !state.profile.kiosk && !isPreview() && !smallScreen();
 }
-/** Read-only views: a preview of another layout, or the public demo. */
+/** Read-only views (no out-of-service, discovery links or run invalidation): a preview of another layout, or the public demo. */
 function readOnlyView() {
   return DEMO || isPreview();
 }
@@ -556,7 +557,10 @@ function editorContext() {
     getState: () => ({
       settings: state.settings, activeLayout: state.activeLayout, layoutId: state.dataLayoutId, machines: [...state.machines.values()],
       unassigned: [...state.unassigned], agents: [...state.agents], serverOffsetMs: events?.serverOffsetMs ?? 0,
+      // D9 amendment: this browser may change things without the token (the HUD computer itself, or the demo)
+      localEdit: state.localEdit === true, tokenHelp: state.tokenHelp ?? null,
     }),
+    demo: DEMO,
     getSnapshots: () => new Map(state.machines),
     serverNow,
     /** fn(eventName, data) for every SSE event; returns an unsubscribe function. */
@@ -655,6 +659,8 @@ async function boot() {
     },
     getContext: () => ({ settings: state.settings, now: serverNow(), theme: state.theme, kiosk: !!state.profile.kiosk }),
     readOnly: readOnlyView,
+    // program transfer: off in a preview; in the demo the explorer only (its Data Servers are simulated, no setup)
+    programsMode: () => (isPreview() ? 'off' : DEMO ? 'use' : 'full'),
     onRunReport: (id) => { detail.close(); discovery.close(); runsPanel.open({ machine: id }); },
     // program transfer (D16): the Programs drawer for this machine, or its setup
     onPrograms: (id, opts) => { detail.close(); discovery.close(); runsPanel.close(); programsPanel.open(id, opts); },
@@ -683,6 +689,7 @@ async function boot() {
     getContext: () => ({ settings: state.settings, now: serverNow(), theme: state.theme, kiosk: !!state.profile.kiosk }),
     getMachines: () => (Array.isArray(state.layout?.machines) ? state.layout.machines : []).filter((m) => m && typeof m.id === 'string'),
     requestToken: () => tokenProvider({ status: 0, path: '', message: 'Programs need the edit token.' }),
+    demo: DEMO,
     toast,
   });
 

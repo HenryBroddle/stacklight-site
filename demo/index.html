@@ -21,12 +21,15 @@
     padding: 7px 12px; border-radius: 999px; background: rgba(11, 12, 13, 0.86); color: #e8ecef; border: 1px solid rgba(255, 255, 255, 0.16);
     font: 600 13px/1.2 Raleway, system-ui, sans-serif; letter-spacing: 0.01em; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
   .demo-ribbon b { font-family: Oswald, 'Arial Narrow', sans-serif; font-weight: 600; letter-spacing: 0.08em; color: #12b886; }
-  .demo-ribbon a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .demo-ribbon a, .demo-ribbon button { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .demo-ribbon button { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  .demo-ribbon button[hidden] { display: none; }
   @media (max-width: 600px) {
     .demo-ribbon { left: auto; right: 8px; bottom: 8px; padding: 6px 10px; font-size: 12px; }
     .demo-ribbon span { display: none; }
     html[data-demo="1"] body { padding-bottom: 48px; }
   }
+  html.editing .demo-ribbon { left: 50%; right: auto; bottom: auto; top: 10px; transform: translateX(-50%); }
   @media print { .demo-ribbon { display: none; } }
   </style>
 </head>
@@ -49,6 +52,6 @@
     <aside id="programs" hidden></aside>
   </div>
   <noscript><p class="noscript">This display needs JavaScript.</p></noscript>
-  <div class="demo-ribbon" role="note"><b>DEMO</b><span>A simulated shop, running in your browser.</span><a href="../">stacklight.shop</a></div>
+  <div class="demo-ribbon" role="note"><b>DEMO</b><span>A simulated shop in your browser. Try Edit layout, or Programs on Mill 3.</span><button type="button" class="demo-reset" hidden onclick="window.__stacklightDemo && window.__stacklightDemo.reset()" title="Go back to the original demo layout">Reset layout</button><a href="../">stacklight.shop</a></div>
 </body>
 </html>
