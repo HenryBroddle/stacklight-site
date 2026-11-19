@@ -1,0 +1,16 @@
+/* Bundled brand fonts (SIL OFL 1.1, see /assets/fonts/OFL-*.txt) — served locally so the HUD works offline on
+   the shop LAN. Oswald: headings, status words, timers, big numbers. Raleway: body text, labels, editor UI. */
+@font-face {
+  font-family: 'Oswald';
+  src: url('../../assets/fonts/oswald-latin.woff2') format('woff2');
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Raleway';
+  src: url('../../assets/fonts/raleway-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

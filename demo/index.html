@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-view="plan+board" data-demo="1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Try Stacklight: a live floor-plan board for a simulated machine shop, running in your browser.">
+  <title>Stacklight demo: a simulated machine shop</title>
+  <link rel="icon" type="image/svg+xml" href="brand/stacklight-icon.svg">
+  <link rel="preload" href="../assets/fonts/oswald-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="../assets/fonts/raleway-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/hud.css">
+  <!-- Stacklight demo: the board below is the real product; demo-backend.js replays a recording of a simulated shop in place of the server. -->
+  <script type="importmap">{ "imports": { "/shared/": "./shared/" } }</script>
+  <script type="module" src="demo-backend.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <style>
+  .demo-ribbon { position: fixed; left: 12px; bottom: 12px; z-index: 50; display: flex; gap: 10px; align-items: center;
+    padding: 7px 12px; border-radius: 999px; background: rgba(11, 12, 13, 0.86); color: #e8ecef; border: 1px solid rgba(255, 255, 255, 0.16);
+    font: 600 13px/1.2 Raleway, system-ui, sans-serif; letter-spacing: 0.01em; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+  .demo-ribbon b { font-family: Oswald, 'Arial Narrow', sans-serif; font-weight: 600; letter-spacing: 0.08em; color: #12b886; }
+  .demo-ribbon a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  @media (max-width: 600px) {
+    .demo-ribbon { left: auto; right: 8px; bottom: 8px; padding: 6px 10px; font-size: 12px; }
+    .demo-ribbon span { display: none; }
+    html[data-demo="1"] body { padding-bottom: 48px; }
+  }
+  @media print { .demo-ribbon { display: none; } }
+  </style>
+</head>
+<body>
+  <div id="app" class="app">
+    <header id="topbar"></header>
+    <div id="banner" hidden></div>
+    <main id="main" class="main">
+      <section id="plan" class="plan" aria-label="Floor plan">
+        <svg id="floorplan" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Floor plan"></svg>
+        <div id="plan-message" class="plan-message" role="status">Loading…</div>
+      </section>
+      <section id="board-head" class="board-head-wrap" aria-label="Summary"></section>
+      <section id="board-rows" class="board-rows-wrap" aria-label="Machines"></section>
+      <aside id="editor-host" class="editor-host" hidden></aside>
+    </main>
+    <aside id="detail" hidden></aside>
+    <aside id="discovery" hidden></aside>
+    <aside id="runs" hidden></aside>
+    <aside id="programs" hidden></aside>
+  </div>
+  <noscript><p class="noscript">This display needs JavaScript.</p></noscript>
+  <div class="demo-ribbon" role="note"><b>DEMO</b><span>A simulated shop, running in your browser.</span><a href="../">stacklight.shop</a></div>
+</body>
+</html>
