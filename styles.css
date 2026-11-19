@@ -58,7 +58,26 @@ a:focus-visible, summary:focus-visible { outline: 2px solid var(--paper); outlin
 figure { margin: 0; }
 figure img, figure video { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: #050606; }
 figcaption { font-size: 14px; color: var(--steel); margin-top: 8px; }
-.tour { max-width: 960px; }
+.feature { max-width: 960px; margin-top: 8px; }
+a.tv { display: block; cursor: zoom-in; }
+a[data-lightbox] { display: block; cursor: zoom-in; }
+a[data-lightbox]:hover img { border-color: var(--steel); }
+dialog.viewer { padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #050606; color: var(--paper); max-width: min(96vw, 1640px); max-height: 94vh; overflow: visible; }
+dialog.viewer::backdrop { background: rgba(0, 0, 0, .9); }
+dialog.viewer figure { margin: 0; padding: 10px; }
+dialog.viewer img { display: block; width: auto; height: auto; max-width: calc(96vw - 22px); max-height: calc(94vh - 64px); border: 0; border-radius: 6px; margin: 0 auto; }
+dialog.viewer figcaption { padding: 8px 6px 2px; text-align: center; font-size: 15px; }
+dialog.viewer button { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: rgba(11, 12, 13, .9); color: var(--paper); font: 400 28px/1 Raleway, sans-serif; cursor: pointer; display: grid; place-items: center; padding: 0 0 4px; }
+dialog.viewer button:hover { border-color: var(--steel); }
+dialog.viewer button:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+.viewer-close { top: -16px; right: -16px; }
+.viewer-prev { left: -22px; top: 50%; transform: translateY(-50%); }
+.viewer-next { right: -22px; top: 50%; transform: translateY(-50%); }
+@media (max-width: 700px) {
+  .viewer-close { top: 6px; right: 6px; }
+  .viewer-prev { left: 6px; }
+  .viewer-next { right: 6px; }
+}
 .demo-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin: 22px 0 6px; }
 .demo-cta .muted { max-width: 34em; }
 .shots { display: grid; grid-template-columns: 4fr 4fr 1.15fr; gap: 16px; margin-top: 16px; align-items: start; }
