@@ -1,6 +1,6 @@
 // The quote configurator (quote/index.html). Everything stays in this page until the visitor sends the email
 // themselves; a draft of the form is kept in this browser only.
-import { MAKES, PRICES, makeById, normalizeQuote, priceQuote, quoteEmail, dollars } from './pricing.js';
+import { MAKES, PRICES, makeById, normalizeQuote, priceQuote, quoteEmail, dollars, updatesStart } from './pricing.js';
 
 const $ = (id) => document.getElementById(id);
 const DRAFT_KEY = 'stacklight.quote-draft';
@@ -43,6 +43,7 @@ function readQuote() {
   return {
     plan: document.querySelector('input[name="plan"]:checked')?.value,
     machines, programTransfer: $('pt').checked, maintenance: $('mb').checked, shop, notes: $('notes').value,
+    renew: document.querySelector('input[name="renew"]:checked')?.value === 'auto',
   };
 }
 
@@ -90,10 +91,17 @@ function update() {
     sum.append(line('Due once', null, dollars(p.onceCents), 'q-total'));
     if (p.monthly) {
       sum.append(line('Then monthly', `${p.monthly.qty} × ${dollars(p.monthly.unitCents)}, ${p.monthly.months} payments`, `${dollars(p.monthly.totalCents)}/mo`, 'q-total'));
-      sum.append(h('p', 'muted q-after', `After 24 payments it's yours. Updates and help after that: optional, ${dollars(PRICES.updatesYear.cents)} a machine a year.`));
-    } else {
-      sum.append(h('p', 'muted q-after', `After the first year, updates and help are optional: ${dollars(p.afterFirstYearCents)} a year for ${p.machines} machine${p.machines === 1 ? '' : 's'}. Let it lapse and the board keeps running.`));
     }
+    // updates and help after what the price includes: its own line, with when it would start and the choice made
+    const u = p.updates;
+    const from = updatesStart(u.startsAfterMonths);
+    sum.append(line(`Updates and help, from ${from}`, `${u.qty} × ${dollars(u.unitCents)} a year · ${u.renew ? 'renews automatically' : 'optional, decide later'}`, `${dollars(u.yearCents)}/yr`, `q-updates${u.renew ? ' q-on' : ''}`));
+    sum.append(h('p', 'muted q-after', p.monthly
+      ? `After 24 payments it's yours. ${u.renew ? 'Updates and help then renew each year until you stop them.' : 'Updates and help after that are optional.'} The board keeps running either way.`
+      : `The first 12 months of updates and help are included. ${u.renew ? 'After that they renew each year until you stop them.' : 'After that they are optional.'} Let them lapse and the board keeps running.`));
+    $('renew-when').textContent = p.monthly ? 'after the 24 payments' : 'after the first year';
+    $('renew-price').textContent = `${dollars(u.unitCents)} a machine a year (${dollars(u.yearCents)} for ${u.qty}), optional`;
+    $('renew-auto-note').textContent = `Invoiced once a year from ${from}. Stop any time, and the board keeps running.`;
     current = q;
   }
   // ready to send: a price, and an email to answer
@@ -152,6 +160,8 @@ if (draft && Array.isArray(draft.machines) && draft.machines.length) {
   if (plan) plan.checked = true;
   $('pt').checked = !!draft.programTransfer;
   $('mb').checked = !!draft.maintenance;
+  const renew = document.querySelector(`input[name="renew"][value="${draft.renew === true ? 'auto' : 'later'}"]`);
+  if (renew) renew.checked = true;
   for (const f of FIELDS) if (typeof (f === 'notes' ? draft.notes : draft.shop?.[f]) === 'string') $(f).value = f === 'notes' ? draft.notes : draft.shop[f];
 } else {
   addRow();

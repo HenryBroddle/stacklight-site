@@ -58,6 +58,8 @@ export function normalizeQuote(q) {
       machines,
       programTransfer: !!q.programTransfer && fanuc > 0,
       maintenance: !!q.maintenance,
+      // updates and help after the included period: renew each year automatically, or decide later (the default)
+      renew: q.renew === true,
       shop: {
         company: text(shop.company, 120), name: text(shop.name, 120), email: text(shop.email, 160), phone: text(shop.phone, 40),
         city: text(shop.city, 80), state: text(shop.state, 40), zip: text(shop.zip, 12),
@@ -90,7 +92,19 @@ export function priceQuote(quote) {
   return {
     machines: n, fanuc, lines, onceCents, monthly,
     afterFirstYearCents: PRICES.updatesYear.cents * n, // optional, the year after the included one
+    // updates and help after what the price includes (the first 12 months; with the monthly plan, its 24 payments)
+    updates: {
+      key: 'updatesYear', lookup: PRICES.updatesYear.lookup, label: 'Updates and help', qty: n,
+      unitCents: PRICES.updatesYear.cents, yearCents: PRICES.updatesYear.cents * n,
+      startsAfterMonths: quote.plan === 'monthly' ? PRICES.monthly.months : 12, renew: !!quote.renew,
+    },
   };
+}
+
+/** The month the paid updates would start, from a date (the quote's, or the invoice's): "November 2027". */
+export function updatesStart(months, from = new Date()) {
+  const d = new Date(from.getFullYear(), from.getMonth() + months, 1);
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
 export const dollars = (cents) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -138,6 +152,8 @@ export function quoteEmail(quote, { to = 'hello@stacklight.shop', date = new Dat
   for (const l of p.lines) L.push(`${l.label}: ${l.qty} x ${dollars(l.unitCents)} = ${dollars(l.totalCents)}`);
   L.push(`Due once: ${dollars(p.onceCents)}`);
   if (p.monthly) L.push(`Monthly: ${p.monthly.qty} x ${dollars(p.monthly.unitCents)} = ${dollars(p.monthly.totalCents)} a month for ${p.monthly.months} months`);
+  L.push(`Updates and help from about ${updatesStart(p.updates.startsAfterMonths, date)}: ${p.updates.qty} x ${dollars(p.updates.unitCents)} = ${dollars(p.updates.yearCents)} a year, optional`);
+  L.push(p.updates.renew ? 'Renew updates and help: automatically each year' : 'Renew updates and help: decide later');
   L.push('Prices before sales tax.');
   if (quote.notes) L.push('', 'Notes:', quote.notes);
   L.push('', `Quote code (for our records): ${encodeQuote(quote)}`, `Built on stacklight.shop/quote/ on ${date.toISOString().slice(0, 10)}.`);

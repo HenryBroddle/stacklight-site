@@ -40,6 +40,17 @@ textarea { resize: vertical; min-height: 84px; }
 .q-plan b { font-family: Oswald, sans-serif; text-transform: uppercase; letter-spacing: .04em; font-weight: 500; font-size: 18px; }
 .q-plan-price { font-weight: 700; }
 
+/* updates and help after the included period */
+.q-renew { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.q-renew-title { margin: 0 0 10px; font-size: 15px; }
+.q-renew-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.q-choice { display: flex; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; color: var(--paper); font-size: 14px; }
+.q-choice:has(input:checked) { border-color: var(--green); }
+.q-choice input { margin-top: 3px; accent-color: var(--green); }
+.q-choice > span { display: flex; flex-direction: column; gap: 2px; }
+.q-updates .q-sa { color: var(--steel); }
+.q-updates.q-on .q-sa { color: var(--paper); }
+
 /* box and add-ons */
 .q-line { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 14px 0; border-top: 1px solid var(--line); color: var(--paper); font-size: 15px; cursor: pointer; }
 .q-line:first-of-type { border-top: 0; padding-top: 0; }
@@ -94,7 +105,7 @@ textarea { resize: vertical; min-height: 84px; }
   .q-machine { grid-template-columns: minmax(0, 1fr) 84px 36px; }
   .q-machine .q-model { grid-column: 1 / -1; grid-row: 2; }
   .q-machine .q-status { grid-row: 3; }
-  .q-plans { grid-template-columns: 1fr; }
+  .q-plans, .q-renew-choices { grid-template-columns: 1fr; }
   .q-fields label, .q-fields label:nth-last-child(-n+3) { grid-column: span 6; }
   .q-fields label.q-short { grid-column: span 3; }
   .top nav a:not(.btn) { display: none; }
