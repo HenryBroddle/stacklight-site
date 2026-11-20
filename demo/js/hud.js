@@ -24,7 +24,8 @@ function button(icon, label, cls) {
 
 /**
  * @param {HTMLElement} el
- * @param {{ onDiscovery?: Function, onRuns?: Function, onEdit?: Function, onTheme?: Function, onSound?: Function, onLayoutPick?: Function }} [actions]
+ * @param {{ onDiscovery?: Function, onRuns?: Function, onMaintenance?: Function, onEdit?: Function, onTheme?: Function, onSound?: Function,
+ *           onLayoutPick?: Function, onTextSize?: (step: -1|0|1) => number }} [actions]  onTextSize: smaller (-1), reset (0) or larger (1); returns the new size
  */
 export function createTopBar(el, actions = {}) {
   el.replaceChildren();
@@ -60,17 +61,79 @@ export function createTopBar(el, actions = {}) {
   nav.setAttribute('aria-label', 'HUD actions');
   const btnSound = button('volume-off', 'Sound off', 'btn-sound');
   btnSound.hidden = true;
+  // Drawer text size (shop feedback, 2026-11-19: "Need font control. Hard to read and cramped."): the drawers and the
+  // dialogs they open, never the board, the plan or this bar; kept per browser by app.js
+  const btnText = button('text-size', 'Text', 'btn-text');
+  btnText.title = 'Text size in the drawers on this screen';
+  btnText.setAttribute('aria-haspopup', 'true');
+  btnText.setAttribute('aria-expanded', 'false');
+  btnText.hidden = !actions.onTextSize;
+  const textMenu = h('div', 'text-menu');
+  textMenu.hidden = true;
+  textMenu.setAttribute('role', 'group');
+  textMenu.setAttribute('aria-label', 'Drawer text size');
+  const textDown = h('button', 'btn btn-quiet text-step', 'A−');
+  textDown.type = 'button';
+  textDown.setAttribute('aria-label', 'Smaller text');
+  const textValue = h('span', 'text-value', '100%');
+  const textUp = h('button', 'btn btn-quiet text-step', 'A+');
+  textUp.type = 'button';
+  textUp.setAttribute('aria-label', 'Larger text');
+  const textReset = h('button', 'btn btn-quiet btn-small', 'Reset');
+  textReset.type = 'button';
+  textMenu.append(textDown, textValue, textUp, textReset);
   const btnTheme = button('sun', 'Light', 'btn-theme');
   const btnRuns = button('report', 'Runs', 'btn-runs');
   btnRuns.title = 'Run report: program runs, cycle times and part counts';
   btnRuns.hidden = !actions.onRuns;
+  // Maintenance (D18): hidden until app.js says the server has it on (never on a TV, in a preview or the public demo);
+  // the badge counts the tasks due, in neutral ink (never a status colour)
+  const btnMaintenance = button('oilcan', 'Maintenance', 'btn-maintenance');
+  const maintBadge = h('span', 'btn-badge');
+  maintBadge.hidden = true;
+  btnMaintenance.append(maintBadge);
+  btnMaintenance.hidden = true;
+  const maintTitle = (due) => (due ? `Maintenance: ${due} task${due === 1 ? '' : 's'} due` : 'Maintenance: what each machine needs and when, from its manuals');
+  btnMaintenance.title = maintTitle(0);
   const btnDiscovery = button('search', 'Discovery', 'btn-discovery');
   const btnEdit = button('pencil', 'Edit layout', 'btn-edit');
-  nav.append(btnSound, btnTheme, btnRuns, btnDiscovery, btnEdit);
+  nav.append(btnSound, btnText, btnTheme, btnRuns, btnMaintenance, btnDiscovery, btnEdit);
   right.append(live, clock, nav);
   el.append(brand, center, right);
+  document.body.append(textMenu);
+
+  const closeTextMenu = () => {
+    if (textMenu.hidden) return;
+    textMenu.hidden = true;
+    btnText.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', onOutside, true);
+    document.removeEventListener('keydown', onTextKey, true);
+  };
+  function onOutside(ev) { if (!textMenu.contains(ev.target) && !btnText.contains(ev.target)) closeTextMenu(); }
+  function onTextKey(ev) { if (ev.key === 'Escape') { ev.stopPropagation(); closeTextMenu(); btnText.focus(); } }
+  btnText.addEventListener('click', () => {
+    if (!textMenu.hidden) { closeTextMenu(); return; }
+    const r = btnText.getBoundingClientRect();
+    textMenu.style.top = `${Math.round(r.bottom + 6)}px`;
+    textMenu.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
+    textMenu.hidden = false;
+    btnText.setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', onOutside, true);
+    document.addEventListener('keydown', onTextKey, true);
+    textUp.focus();
+  });
+  const step = (n) => { const v = actions.onTextSize?.(n); if (typeof v === 'number') showTextSize(v); };
+  textDown.addEventListener('click', () => step(-1));
+  textUp.addEventListener('click', () => step(1));
+  textReset.addEventListener('click', () => step(0));
+  function showTextSize(v) {
+    const pct = `${Math.round(v * 100)}%`;
+    textValue.textContent = pct;
+    btnText.title = `Text size on this screen: ${pct}`;
+  }
 
   btnRuns.addEventListener('click', () => actions.onRuns?.());
+  btnMaintenance.addEventListener('click', () => actions.onMaintenance?.());
   btnDiscovery.addEventListener('click', () => actions.onDiscovery?.());
   btnEdit.addEventListener('click', () => actions.onEdit?.());
   btnTheme.addEventListener('click', () => actions.onTheme?.());
@@ -138,9 +201,23 @@ export function createTopBar(el, actions = {}) {
     setDiscoveryAvailable(available) {
       btnDiscovery.hidden = !available;
     },
+    /** Show the text size (a multiplier, 1 = 100 %). */
+    setTextSize(v) { if (typeof v === 'number') showTextSize(v); },
     /** Hide the Runs button when the server has the run report turned off. */
     setRunsAvailable(available) {
       btnRuns.hidden = !available || !actions.onRuns;
+    },
+    /**
+     * Maintenance (D18): `available` false hides the button (feature off, older server, kiosk, preview, public demo);
+     * `due` is the number of tasks due, shown as a badge (hidden at 0).
+     */
+    setMaintenance({ available = false, due = 0 } = {}) {
+      btnMaintenance.hidden = !available || !actions.onMaintenance;
+      const n = Number.isFinite(due) && due > 0 ? Math.floor(due) : 0;
+      const text = n > 99 ? '99+' : n ? String(n) : '';
+      if (maintBadge.textContent !== text) maintBadge.textContent = text;
+      maintBadge.hidden = !n;
+      btnMaintenance.title = maintTitle(n);
     },
     element: el,
   };

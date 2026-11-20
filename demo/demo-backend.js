@@ -6,9 +6,10 @@
 // recording.json: a recording of the real product running the showcase shop (an invented shop, simulated machines;
 // never a customer's). The recording plays as if it began when the page opened: every timestamp is shifted to the
 // visitor's clock, and it loops. Machine timelines and the run list grow from the replayed changes.
-// Two features work against the visitor's own browser: the layout editor (saves go to localStorage, layouts.js) and
-// program transfer on the FANUC machines (simulated Data Servers in memory, dataServer.js). Nothing leaves the
-// browser; every other change is refused (403 DEMO_READ_ONLY).
+// Three features work against the visitor's own browser: the layout editor (saves go to localStorage, layouts.js),
+// program transfer on the FANUC machines (simulated Data Servers in memory, dataServer.js) and maintenance (the
+// product's own service and catalog, its plan in localStorage, maintenance.js; D18). Nothing leaves the browser;
+// every other change is refused (403 DEMO_READ_ONLY).
 //
 // Recording format 1 (written by `node scripts/demo-site.mjs record`):
 //   { format: 1, t0, duration, bootId, version,
@@ -314,6 +315,9 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
   let layouts = null;
   let programs = null;
   let programMachines = {};
+  /** { service, store, ledger } once maintenance has started (null: not in this demo build) */
+  let maintenance = null;
+  let maintenanceTickAt = 0;
   let lastPing = 0;
   let pending = [];      // events the replay moved past, not yet sent to the open streams
   let resyncDue = false; // the loop restarted: send a full snapshot instead
@@ -331,10 +335,33 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
       const seeds = programSeeds(rec, { now: Date.now() });
       programMachines = Object.fromEntries(seeds.map((m) => [m.id, { enabled: true }]));
       programs = createDemoDataServer({ machines: seeds, getUse: programUse });
+      maintenance = await startMaintenance().catch((e) => { win.console?.warn?.('[demo] maintenance is not available', e); return null; });
       win.setInterval(tick, 250);
       showReset();
       return true;
     });
+
+  /** The product's maintenance service with the shipped catalog; its plan and meters in this browser (maintenance.js). */
+  async function startMaintenance() {
+    const [svcMod, demo, shared] = await Promise.all([import('./maintenance-service.js'), import('./maintenance.js'), import('/shared/maintenance.js')]);
+    const res = await realFetch(String(new URL('maintenance-catalog.json', recordingUrl)), { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`catalog: HTTP ${res.status}`);
+    const { catalog } = shared.validateCatalog(await res.json());
+    const storage = safeStorage(win);
+    const recording = `${rec.bootId ?? ''}|${rec.t0 ?? ''}`;
+    const store = demo.createDemoMaintenanceStore({ storage, recording });
+    const ledger = demo.createDemoLedger({ storage, recording });
+    const machines = () => (layouts.current().layout.machines ?? []).filter((m) => m && typeof m.id === 'string');
+    const service = svcMod.createMaintenanceService({
+      getSettings: () => ({ maintenance: { enabled: true, dueSoonPercent: 10 } }),
+      listMachines: machines, getSnapshot: (id) => replay.machine(id), store, ledger, catalog,
+    });
+    await service.init();
+    service.tick(replay.state(Date.now()).machines);
+    if (store.fresh) await demo.seedDemoMaintenance(service, { machines: machines(), ledger });
+    service.on('change', (e) => broadcast('maintenance', { ...e, serverTime: Date.now() }));
+    return { service, store, ledger };
+  }
   ready.catch((e) => win.console?.error?.('[demo] the recording could not be loaded', e));
 
   /** What a machine is running or has selected, as the HUD's live status says (src/programs/service.js machineUse). */
@@ -353,13 +380,14 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
       ...s,
       localEdit: true,
       layout: { ...(s.layout ?? {}), id: layouts.id, name: cur.layout.name ?? null, etag: cur.etag, updatedAt: cur.updatedAt, errors: null },
-      settings: { ...(s.settings ?? {}), programs: { enabled: true, machines: programMachines } },
+      settings: { ...(s.settings ?? {}), programs: { enabled: true, machines: programMachines }, ...(maintenance ? { maintenance: { enabled: true } } : {}) },
+      maintenance: maintenance ? { enabled: true, available: true, counts: maintenance.service.counts() } : undefined,
     };
   }
 
   function showReset() {
     const el = win.document?.querySelector?.('.demo-reset');
-    if (el) el.hidden = !layouts?.custom;
+    if (el) el.hidden = !(layouts?.custom || maintenance?.store.changedByVisitor);
   }
 
   function broadcast(name, data) {
@@ -380,6 +408,11 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
       advance(now);
       const due = pending;
       pending = [];
+      if (maintenance) {
+        // maintenance follows the machines: alarms that mean maintenance, the HUD's own hours, the 60 s re-check
+        for (const ev of due) if (ev.name === 'machine') maintenance.service.observe(ev.data.machine);
+        if (now - maintenanceTickAt >= 30_000) { maintenanceTickAt = now; maintenance.service.tick(replay.state(now).machines); }
+      }
       if (resyncDue) { resyncDue = false; broadcast('snapshot', state(now)); }
       else for (const ev of due) broadcast(ev.name, ev.data);
       if (now - lastPing >= 15_000) {
@@ -500,6 +533,38 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
         if (method === 'DELETE') return json(200, programs.remove(id, name));
       }
 
+      // --- maintenance: the product's service, its plan in this browser ------------------------
+      if (maintenance && (p === '/api/maintenance' || p.startsWith('/api/maintenance/'))) {
+        const svc = maintenance.service;
+        const q = url.searchParams;
+        const changed = () => { maintenance.store.markVisitorChange(); showReset(); };
+        try {
+          if (read && p === '/api/maintenance') return json(200, { serverTime: now, ...svc.overview({ machineId: q.get('machine') || null }) });
+          if (read && p === '/api/maintenance/catalog') {
+            if (!q.get('machine')) return json(400, { serverTime: now, ok: false, error: 'INVALID', message: 'machine is required' });
+            const model = q.get('model');
+            return json(200, { serverTime: now, ...svc.catalogFor(q.get('machine'), { model: model === null ? undefined : model || null }) });
+          }
+          if (read && p === '/api/maintenance/log') {
+            return json(200, { serverTime: now, entries: await svc.log({ machineId: q.get('machine') || null, taskId: q.get('task') || null, limit: Number(q.get('limit')) || 200 }) });
+          }
+          m = /^\/api\/maintenance\/machines\/([^/]+)$/.exec(p);
+          if (m && method === 'PUT') { const r = await svc.setup(dec(m[1]), await bodyJson(init)); changed(); return json(200, { serverTime: now, ...r }); }
+          m = /^\/api\/maintenance\/machines\/([^/]+)\/tasks$/.exec(p);
+          if (m && method === 'POST') { const r = await svc.addTask(dec(m[1]), await bodyJson(init)); changed(); return json(201, { serverTime: now, ...r }); }
+          m = /^\/api\/maintenance\/machines\/([^/]+)\/tasks\/([^/]+)$/.exec(p);
+          if (m && method === 'PUT') { const r = await svc.editTask(dec(m[1]), dec(m[2]), await bodyJson(init)); changed(); return json(200, { serverTime: now, ...r }); }
+          if (m && method === 'DELETE') { const r = await svc.removeTask(dec(m[1]), dec(m[2])); changed(); return json(200, { serverTime: now, ...r }); }
+          m = /^\/api\/maintenance\/machines\/([^/]+)\/tasks\/([^/]+)\/done$/.exec(p);
+          if (m && method === 'POST') { const r = await svc.done(dec(m[1]), dec(m[2]), (await bodyJson(init)) ?? {}); changed(); return json(200, { serverTime: now, ...r }); }
+          m = /^\/api\/maintenance\/machines\/([^/]+)\/start$/.exec(p);
+          if (m && method === 'POST') { const r = await svc.startAll(dec(m[1])); changed(); return json(200, { serverTime: now, ...r }); }
+        } catch (e) {
+          if (e && Number.isInteger(e.status) && typeof e.code === 'string') return failure(now, e); // MaintenanceError
+          throw e;
+        }
+      }
+
       if (!read) return refuse(now, 'This is a demo, so that cannot be changed here.');
       return json(404, { serverTime: now, ok: false, error: 'NOT_IN_DEMO', message: 'Not part of the demo' });
     } catch (e) {
@@ -563,10 +628,10 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
   }
   win.EventSource = DemoEventSource;
 
-  /** The ribbon's "Reset": drop this browser's layout and start the demo again. */
+  /** The ribbon's "Reset demo": drop this browser's layout and maintenance plan and start the demo again. */
   win.__stacklightDemo = {
     async reset() {
-      try { await ready; layouts.reset(); } catch { /* nothing stored */ }
+      try { await ready; layouts.reset(); maintenance?.store.clear(); maintenance?.ledger.clear(); } catch { /* nothing stored */ }
       win.location.reload();
     },
   };

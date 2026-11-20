@@ -1,4 +1,4 @@
-// REST + SSE client for the HUD and the editor (docs/ARCHITECTURE.md §8, §11; DECISIONS D4, D5, D9).
+// REST + SSE client for the HUD and the editor (docs/ARCHITECTURE.md §8, §11; DECISIONS D4, D5, D9, D18).
 // - Same-origin only; every mutation sends Content-Type: application/json and, when one is stored, the edit
 //   token as `Authorization: Bearer …` (never in a URL).
 // - The token lives in sessionStorage unless "remember on this device" is chosen (then localStorage too).
@@ -310,10 +310,52 @@ export const programs = {
 };
 
 // ---------------------------------------------------------------------------------------------
+// Maintenance (DECISIONS D18): reads are open; writes need the edit token (or the HUD PC's own browser)
+// ---------------------------------------------------------------------------------------------
+
+const machinePath = (id) => `/api/maintenance/machines/${enc(id)}`;
+
+export const maintenance = {
+  /**
+   * GET /api/maintenance[?machine=] → { enabled, available, catalogVersion, soonPercent, now, counts,
+   * machines: [{ id, name, setUp, model, suggested, control, note, service, facts, meters, pace, counts, documents, tasks }] }
+   */
+  get: ({ machine } = {}) => fetchJson(`/api/maintenance${machine ? `?machine=${enc(machine)}` : ''}`),
+  /**
+   * Set up: GET /api/maintenance/catalog?machine=[&model=] → { version, about, models, suggested, model, control, note,
+   * service, facts, reviewed, entries }. `model` undefined: the machine's chosen model, else the suggestion; '': none.
+   */
+  catalog: (machine, { model } = {}) => {
+    const q = new URLSearchParams({ machine: String(machine) });
+    if (typeof model === 'string') q.set('model', model);
+    return fetchJson(`/api/maintenance/catalog?${q}`);
+  },
+  /** Save Set up: { model, tasks: [{ catalogId, every?, orEvery? }] } → { ok, added, enabled, disabled, machine } */
+  setup: (machine, body) => fetchJson(machinePath(machine), { method: 'PUT', body }),
+  /** A task of the shop's own: { title, action?, kind?, basis?, every?, orEvery?, alarm?: { codes, within? }, link? } → { ok, task } */
+  addTask: (machine, task) => fetchJson(`${machinePath(machine)}/tasks`, { method: 'POST', body: task }),
+  /** Change a task: { title?, action?, basis?, every?, orEvery?, alarm?, link?, enabled? } → { ok, task } */
+  editTask: (machine, task, changes) => fetchJson(`${machinePath(machine)}/tasks/${enc(task)}`, { method: 'PUT', body: changes }),
+  removeTask: (machine, task) => fetchJson(`${machinePath(machine)}/tasks/${enc(task)}`, { method: 'DELETE' }),
+  /** Done…: { how: 'now'|'date'|'reading'|'start', date?: 'YYYY-MM-DD', reading?: hours, note? } → { ok, task, warning? } */
+  done: (machine, task, body) => fetchJson(`${machinePath(machine)}/tasks/${enc(task)}/done`, { method: 'POST', body }),
+  /** Count all from now: every enabled task without a start → { ok, started } */
+  start: (machine) => fetchJson(`${machinePath(machine)}/start`, { method: 'POST', body: {} }),
+  /** GET /api/maintenance/log?machine=&limit= → { entries: [{ at, machineId, taskId, action, title, how, note }] }, newest first */
+  log: ({ machine, limit } = {}) => {
+    const q = new URLSearchParams();
+    if (machine) q.set('machine', machine);
+    if (Number.isFinite(limit)) q.set('limit', String(Math.floor(limit)));
+    const s = q.toString();
+    return fetchJson(`/api/maintenance/log${s ? `?${s}` : ''}`);
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
 // Server-Sent Events
 // ---------------------------------------------------------------------------------------------
 
-const KNOWN_EVENTS = ['snapshot', 'machine', 'machines', 'unassigned', 'agents', 'layout', 'layouts', 'discovery', 'ping', 'settings', 'service', 'runs', 'hello', 'shutdown'];
+const KNOWN_EVENTS = ['snapshot', 'machine', 'machines', 'unassigned', 'agents', 'layout', 'layouts', 'discovery', 'ping', 'settings', 'service', 'runs', 'maintenance', 'hello', 'shutdown'];
 
 /**
  * Connect to /api/events (pass `url: '/api/events' + viewQuery(view)` for a screen or layout view).

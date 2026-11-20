@@ -1,14 +1,17 @@
 // Machine detail drawer: status, reason and timers; active conditions (level, code, message, component, since);
-// values (mode, program, parts, spindle, feed converted to settings.display.feedUnits, overrides, tool); device
-// info (vendor/model/serial/protocol via describeSource); a 12-hour timeline from /api/machines/:id/history; today's
-// program runs from /api/runs (D12) with a link to the run report; and the out-of-service toggle (token, docs/
-// DECISIONS.md D1). Everything is rendered with textContent.
+// values (mode, program, parts, spindle, feed converted to settings.display.feedUnits, overrides, tool, the control's
+// hour meters); device info (vendor/model/serial/protocol via describeSource); a 12-hour timeline from
+// /api/machines/:id/history; today's program runs from /api/runs (D12) with a link to the run report; the machine's
+// maintenance tasks that need doing (D18) with Done…; and the out-of-service toggle (token, docs/DECISIONS.md D1).
+// Everything is rendered with textContent.
 import { describeSource } from '/shared/sources.js';
 import { formatDuration, formatNumber, formatPercent } from '/shared/format.js';
 import { summarizeRuns } from '/shared/runs.js';
 import { errorClassText } from '/shared/contracts.js';
+import { compareTaskRows } from '/shared/maintenance.js';
 import { iconSvg } from './icons.js';
 import { convertFeed, formatSinceClock, formatTimeOfDay, glance, kindLabel, paletteFor } from './statusStyle.js';
+import { hoursText, hudCountNote, openDoneDialog, progressText, taskSummary } from './maintenancePanel.js';
 
 const HOUR = 3_600_000;
 
@@ -52,7 +55,10 @@ function dl(pairs) {
  * @param {{ api: object, getMachine: (id: string) => ({ vm: object, snapshot: object|null, layoutMachine: object|null }|null),
  *           getContext: () => ({ settings: object, now: number, theme: string, kiosk: boolean }),
  *           onClose?: Function, toast?: Function, readOnly?: () => boolean, programsMode?: () => 'full'|'use'|'off', onRunReport?: (id: string) => void,
- *           onPrograms?: (id: string, opts?: { view?: 'list'|'setup' }) => void }} deps
+ *           onPrograms?: (id: string, opts?: { view?: 'list'|'setup' }) => void,
+ *           maintenance?: () => boolean, onMaintenance?: (id: string, opts?: { view?: 'list'|'setup' }) => void }} deps
+ *   maintenance(): the Maintenance section shows (D18: the server has it on; not on a TV or in a preview)
+ *   maintenanceReadOnly(): no maintenance writes here (default: readOnly; the demo allows them, D17)
  */
 export function createDetail(el, deps) {
   const { api, getMachine, getContext, onClose, toast } = deps;
@@ -70,6 +76,12 @@ export function createDetail(el, deps) {
   let runsFor = null;
   let runsAt = 0;
   let runsLoading = false;
+  /** Maintenance of the open machine (D18): { machine, available } | { error } | { hidden } | null (loading) */
+  let maint = null;
+  let maintFor = null;
+  let maintAt = 0;
+  let maintLoading = false;
+  let maintAgain = false;
 
   el.replaceChildren();
   el.classList.add('drawer', 'detail');
@@ -157,6 +169,91 @@ export function createDetail(el, deps) {
     return s;
   }
 
+  /** The Maintenance section shows (D18): the app says the feature is on here, and never on a TV. */
+  const maintOn = () => !!deps.onMaintenance && !getContext().kiosk && !!deps.maintenance?.();
+
+  /** This machine's maintenance (GET /api/maintenance?machine=), at most once a minute unless forced (a write, an SSE event). */
+  async function loadMaint(id, force = false) {
+    if (!maintOn()) return;
+    if (maintLoading) { if (force) maintAgain = true; return; }
+    if (!force && maintFor === id && Date.now() - maintAt < 60_000) return;
+    maintLoading = true;
+    const settle = (value) => {
+      if (currentId !== id) return;
+      maint = value;
+      maintFor = id;
+      maintAt = Date.now();
+      lastSig = '';
+      render();
+    };
+    try {
+      const r = await api.maintenance.get({ machine: id });
+      const m = Array.isArray(r?.machines) ? r.machines.find((x) => x && x.id === id) : null;
+      settle(r?.enabled === false || !m ? { hidden: true } : { machine: m, available: r?.available !== false });
+    } catch (e) {
+      // 404: an older server, or a machine that is not on the active layout; 503: turned off or unreadable
+      settle(e?.status === 404 || e?.status === 503 ? { hidden: true } : { error: 'Maintenance unavailable' });
+    } finally {
+      maintLoading = false;
+      if (maintAgain) { maintAgain = false; if (currentId) loadMaint(currentId, true); }
+    }
+  }
+
+  /**
+   * Maintenance (D18): up to three tasks that need doing (due, due soon, then needing a start), each with Done…, and
+   * the way to all of them; "Set up maintenance…" when the machine has none.
+   */
+  function maintenanceSection(ctx, clockOpts) {
+    if (!maintOn() || (maintFor === currentId && maint?.hidden)) return null;
+    const s = h('section', 'd-section maint-section');
+    s.append(h('h3', null, 'Maintenance'));
+    if (!maint || maintFor !== currentId) { s.append(h('p', 'muted', 'Loading…')); return s; }
+    if (maint.error) { s.append(h('p', 'muted', maint.error)); return s; }
+    const m = maint.machine;
+    const id = currentId;
+    const o = { now: ctx.now, timeZone: clockOpts.timeZone, clock24h: clockOpts.clock24h };
+    const tasks = (Array.isArray(m.tasks) ? m.tasks : []).filter((t) => t && typeof t === 'object' && typeof t.id === 'string');
+    const canWrite = maint.available && !(deps.maintenanceReadOnly ?? deps.readOnly)?.();
+    if (!tasks.length) {
+      s.append(h('p', 'muted', m.setUp ? 'No maintenance tasks for this machine.' : 'No maintenance tasks yet: Set up lists the ones its builder publishes.'));
+      if (canWrite) {
+        const b = h('button', 'btn btn-quiet mt-setup-link');
+        b.type = 'button';
+        b.append(iconSvg('sliders', { size: null }), h('span', null, 'Set up maintenance…'));
+        b.addEventListener('click', () => deps.onMaintenance(id, { view: 'setup' }));
+        s.append(b);
+      }
+      return s;
+    }
+    const top = tasks.filter((t) => ['due', 'soon', 'start'].includes(t.status?.state)).sort(compareTaskRows).slice(0, 3);
+    if (top.length) {
+      const ul = h('ul', 'mt-list');
+      for (const t of top) {
+        const li = h('li', 'mt-row');
+        li.dataset.task = t.id;
+        li.append(taskSummary(t, m, { ...o, onDone: canWrite ? () => maintDone(t, m) : null }));
+        ul.append(li);
+      }
+      s.append(ul);
+    } else {
+      const next = tasks.filter((t) => t.status?.state === 'ok').sort(compareTaskRows)[0];
+      s.append(h('p', 'mt-next', next ? `Nothing due. Next: ${next.title} · ${progressText(next, o)}` : 'Nothing due.'));
+    }
+    const hud = hudCountNote(m, o);
+    if (hud) s.append(h('p', 'note', hud));
+    const all = h('button', 'btn btn-quiet mt-all');
+    all.type = 'button';
+    all.append(iconSvg('oilcan', { size: null }), h('span', null, `All ${tasks.length} task${tasks.length === 1 ? '' : 's'}`));
+    all.addEventListener('click', () => deps.onMaintenance(id));
+    s.append(all);
+    return s;
+  }
+
+  async function maintDone(task, machine) {
+    const r = await openDoneDialog(task, machine, { api, toast, getContext });
+    if (r && currentId === machine.id) loadMaint(machine.id, true);
+  }
+
   /**
    * Programs (D16): open the machine's Data Server explorer, or set transfer up (FANUC machines, editors only).
    * deps.programsMode(): 'full' (default), 'use' (the explorer, never setup: the public demo) or 'off'.
@@ -193,7 +290,7 @@ export function createDetail(el, deps) {
     const { vm, snapshot: snap, layoutMachine: lm } = m;
     const display = ctx.settings?.display ?? {};
     const clockOpts = { clock24h: !!display.clock24h, timeZone: typeof display.timeZone === 'string' ? display.timeZone : undefined };
-    const sig = JSON.stringify([vm.status, vm.variant, vm.timer, vm.down, vm.attention, snap?.values, snap?.conditions, snap?.service, snap?.connection, snap?.connectionError, snap?.connectionErrorClass, snap?.device, lm, historyAt, runsAt, ctx.theme, serviceFormOpen, ctx.settings?.programs, Math.floor(ctx.now / 30_000)]);
+    const sig = JSON.stringify([vm.status, vm.variant, vm.timer, vm.down, vm.attention, snap?.values, snap?.conditions, snap?.service, snap?.connection, snap?.connectionError, snap?.connectionErrorClass, snap?.device, lm, historyAt, runsAt, maintAt, maintOn(), ctx.theme, serviceFormOpen, ctx.settings?.programs, Math.floor(ctx.now / 30_000)]);
     if (sig === lastSig) return;
     lastSig = sig;
 
@@ -252,6 +349,10 @@ export function createDetail(el, deps) {
       parts.push(section('Active alarms & warnings', h('p', 'muted', 'None')));
     }
 
+    // --- maintenance (D18)
+    const maintSec = maintenanceSection(ctx, clockOpts);
+    if (maintSec) parts.push(maintSec);
+
     // --- values
     const v = snap?.values ?? {};
     if (vm.variant === 'status' || vm.variant === 'service') {
@@ -278,6 +379,8 @@ export function createDetail(el, deps) {
         ['Overrides', `Feed ${pct(v.feedOverride)} · Rapid ${pct(v.rapidOverride)} · Spindle ${pct(v.spindleOverride)}`],
         ['E-stop', titleCase(v.emergencyStop)],
         ['Availability', titleCase(v.availability)],
+        // the control's own hour meters (D18), with or without the maintenance board
+        ...(hoursText(v) ? [['Hours', hoursText(v)]] : []),
         ...(v.functionalMode ? [['Functional mode', titleCase(v.functionalMode)]] : []),
         ...(v.message ? [['Message', v.message]] : []),
       ])));
@@ -456,6 +559,7 @@ export function createDetail(el, deps) {
     render();
     loadHistory(currentId);
     loadRuns(currentId);
+    loadMaint(currentId);
   }, 1000);
 
   return {
@@ -469,9 +573,11 @@ export function createDetail(el, deps) {
       el.hidden = false;
       if (historyFor !== id) history = null;
       if (runsFor !== id) runsToday = null;
+      if (maintFor !== id) maint = null;
       render();
       loadHistory(id, true);
       loadRuns(id, true);
+      loadMaint(id, true);
       close.focus({ preventScroll: true });
     },
     close: api_close,
@@ -486,6 +592,11 @@ export function createDetail(el, deps) {
       runsAt = Date.now();
       lastSig = '';
       render();
+    },
+    /** SSE 'maintenance' { machineId, counts, total }: refetch the open machine's tasks when they changed. */
+    onMaintenanceEvent(data) {
+      if (!currentId || el.hidden || (typeof data?.machineId === 'string' && data.machineId !== currentId)) return;
+      loadMaint(currentId, true);
     },
     get currentId() { return currentId; },
     get isOpen() { return !el.hidden; },

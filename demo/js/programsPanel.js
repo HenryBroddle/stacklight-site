@@ -28,6 +28,20 @@ function button(label, cls, icon) {
 }
 
 /** 186 KB, 1.4 MB. */
+/**
+ * What the Preview column shows for a program's first line (shop feedback, 2026-11-19: "display what's in ( ) on the
+ * first line"): the text inside its first parentheses, e.g. "BRACKET LH OP2" from "O00001732(BRACKET LH OP2)". A comment cut off by the 160-character limit still shows. Without
+ * parentheses: the line minus its program number or <name>, or '' when nothing else is on it.
+ * @param {string|null|undefined} line
+ */
+export function previewFromFirstLine(line) {
+  if (typeof line !== 'string') return '';
+  const text = line.replace(/…$/, '').trim();
+  const m = /\(([^()]*)\)/.exec(text) ?? /\(([^()]*)$/.exec(text);
+  if (m) return m[1].replace(/\s+/g, ' ').trim();
+  return text.replace(/^(?:[OoNn:]\d+|<[^>]*>)\s*/, '').trim();
+}
+
 export function formatBytes(n) {
   if (!finite(n) || n < 0) return '—';
   if (n < 1024) return `${n} B`;
@@ -77,7 +91,7 @@ export function createProgramsPanel(el, deps) {
   const st = {
     id: null, view: 'list', data: null, error: null, loading: false, menuFor: null, sending: null,
     fresh: new Set(), historyOpen: false, history: null, historyError: null, overview: null, setupError: null, loginFor: null,
-    linesLeft: 0,
+    linesLeft: 0, asking: false,
   };
   let loadSeq = 0;
   let linesSeq = 0;
@@ -152,16 +166,25 @@ export function createProgramsPanel(el, deps) {
     } finally {
       if (seq === loadSeq) { st.loading = false; render(); }
     }
-    if (seq === loadSeq && st.data?.firstLinesPending > 0) readFirstLines();
+    if (seq === loadSeq && st.data?.firstLinesPending > 0 && !st.data?.previews?.paused) readFirstLines();
   }
+
+  /** Why previews are not being read right now (the list's summary line). */
+  const PREVIEW_WAIT = Object.freeze({
+    running: 'previews are read when the machine is not running',
+    'status-unknown': 'previews wait until the HUD sees the machine',
+    'recent-change': 'previews resume shortly',
+  });
 
   /**
    * What a program's Preview cell shows: its first line with "..." after it (more follows; three periods, because
    * the HUD font draws "…" too small to see), "Reading…" while it is being read, else the comment the HUD knows.
    */
   const lineText = (f) => {
-    if (f.firstLine) return `${f.firstLine.replace(/…$/, '')} ...`;
-    if (f.firstLine === '') return '';
+    if (typeof f.firstLine === 'string') {
+      const p = previewFromFirstLine(f.firstLine);
+      return p ? `${p} ...` : '';
+    }
     return st.linesLeft > 0 ? 'Reading…' : f.comment ?? '';
   };
   function paintLine(f) {
@@ -178,6 +201,7 @@ export function createProgramsPanel(el, deps) {
     st.linesLeft = st.data?.firstLinesPending ?? 0;
     const current = () => seq === linesSeq && st.id === id && !!st.data && !el.hidden && st.view === 'list';
     while (st.linesLeft > 0 && current()) {
+      if (st.sending || st.asking) break; // never alongside a send or while a question is open (one session per machine)
       let r;
       try { r = await api.programs.firstLines(id); } catch { break; }
       if (!current()) return;
@@ -186,8 +210,9 @@ export function createProgramsPanel(el, deps) {
         if (Object.hasOwn(lines, f.name)) { f.firstLine = lines[f.name]; paintLine(f); }
       }
       st.linesLeft = Number(r?.pending) || 0;
+      if (r?.paused && st.data) st.data.previews = { ...(st.data.previews ?? {}), paused: r.paused };
       renderHead();
-      if (!Object.keys(lines).length) break; // no progress: stop rather than ask again
+      if (r?.paused || !Object.keys(lines).length) break; // paused, or no progress: stop rather than ask again
     }
     if (seq !== linesSeq) return;
     st.linesLeft = 0;
@@ -288,22 +313,23 @@ export function createProgramsPanel(el, deps) {
     try {
       const r = await api.programs.upload(st.id, name, blob, { replace });
       st.fresh.add(String(r.name).toUpperCase());
-      toast(`${r.action === 'replaced' ? 'Replaced' : 'Sent'} ${r.name} on ${machineName()} · read back and checked`, { kind: 'ok' });
+      toast(`${r.action === 'replaced' ? 'Replaced' : 'Sent'} ${r.name} on ${machineName()} · read back and checked${r.note ? ' (the Data Server stored it in its own text format; see History)' : ''}`, { kind: 'ok', timeoutMs: r.note ? 9000 : undefined });
     } catch (e) {
       st.sending = null;
       render();
       if (e?.code === 'EXISTS') {
         const b = e.body ?? {};
+        st.asking = true;
         const yes = await modal({
           heading: `Replace ${b.name ?? name}?`, icon: 'upload',
           lines: [`${machineName()} already has ${b.name ?? name} (${formatBytes(b.size)}, ${formatModified(b.modified, ctx().now, clockOpts())}). The HUD keeps that copy before replacing it, so you can put it back from History.`],
           warn: runningWarning(b.running, b.program, b.name ?? name),
           actions: [{ label: 'Cancel', value: false }, { label: 'Replace', primary: true, value: true }],
-        });
+        }).finally(() => { st.asking = false; });
         again = !!yes;
       } else if (e?.code === 'IN_USE') await lockedDialog(name, e.message);
       else if (e?.code === 'STATUS_UNKNOWN') await problemDialog(`${name} was not replaced`, e.message);
-      else toast(`${name}: ${e?.message ?? 'not sent'}`, { kind: 'error', timeoutMs: 10000 });
+      else toast(`${name}: ${e?.message ?? 'not sent'}`, { kind: 'error', timeoutMs: e?.code === 'VERIFY_FAILED' ? 20000 : 10000 });
     } finally {
       st.sending = null;
       render();
@@ -335,7 +361,7 @@ export function createProgramsPanel(el, deps) {
     const s = st.data?.status ?? {};
     const yes = await modal({
       heading: `Delete ${f.name} from ${machineName()}?`, icon: 'trash',
-      lines: [`${f.firstLine || f.comment ? `${f.firstLine || f.comment}. ` : ''}The HUD keeps a copy on the HUD PC first, so you can put it back from History.`],
+      lines: [`${previewFromFirstLine(f.firstLine) || f.comment ? `${previewFromFirstLine(f.firstLine) || f.comment}. ` : ''}The HUD keeps a copy on the HUD PC first, so you can put it back from History.`],
       warn: runningWarning(s.running, s.program, f.name),
       actions: [{ label: 'Cancel', value: false }, { label: 'Delete', primary: true, value: true }],
     });
@@ -446,8 +472,9 @@ export function createProgramsPanel(el, deps) {
     historyBtn.hidden = st.view !== 'list' || !st.id;
     setupBtn.querySelector('span').textContent = st.view === 'setup' ? 'Back to programs' : 'Setup';
     setupBtn.hidden = demo || (st.view === 'setup' && !st.id);
+    const waiting = d?.previews?.paused && (d.firstLinesPending ?? 0) > 0 ? PREVIEW_WAIT[d.previews.paused] ?? '' : '';
     summary.textContent = listReady
-      ? `${d.files.length} program${d.files.length === 1 ? '' : 's'}${st.loading ? ' · reading…' : st.linesLeft > 0 ? ` · reading previews, ${st.linesLeft} to go` : ''}`
+      ? `${d.files.length} program${d.files.length === 1 ? '' : 's'}${st.loading ? ' · reading…' : st.linesLeft > 0 ? ` · reading previews, ${st.linesLeft} to go` : waiting ? ` · ${waiting}` : ''}`
       : (st.loading ? 'Reading the Data Server…' : '');
   }
 
@@ -574,6 +601,9 @@ export function createProgramsPanel(el, deps) {
         const t = historyText(e);
         const text = h('div', 'prog-hist-text');
         text.append(h('div', 'prog-hist-title', t.title), h('div', 'muted small', [formatModified(e.at, ctx().now, clockOpts()), t.meta].filter(Boolean).join(' · ')));
+        // what the read-back check found: how a failed copy differed, or how the Data Server reformatted a good one
+        const found = e.result === 'failed' ? [e.difference, e.removed ? 'Removed from the machine.' : null].filter(Boolean).join(' ') : e.note ? `Checked: the Data Server stored it in its own text format. ${e.note}` : '';
+        if (found) text.append(h('div', 'small prog-hist-check', found));
         row.append(text);
         if (e.canPutBack) {
           const b = button('Put back', 'btn-accent btn-small', 'refresh');
@@ -651,7 +681,7 @@ export function createProgramsPanel(el, deps) {
       } catch (e) { toast(e?.message ?? 'Not saved', { kind: 'error' }); }
       loadOverview();
     });
-    // ASCII (default): the control turns line endings into its own end of block; some Data Servers (the Kiwa's) need it
+    // ASCII (default): the control turns line endings into its own end of block; some Data Servers need it
     const mode = h('select', 'runs-select prog-mode');
     for (const [v, label] of [['ascii', 'ASCII'], ['binary', 'Binary']]) {
       const opt = h('option', null, label);
@@ -668,7 +698,24 @@ export function createProgramsPanel(el, deps) {
       } catch (e) { toast(e?.message ?? 'Not saved', { kind: 'error' }); }
       loadOverview();
     });
-    addrTd.append(host, port, mode, save);
+    // first-line previews: only while the machine is not running (default), any time, or off
+    const prev = h('select', 'runs-select prog-mode');
+    for (const [v, label] of [['idle', 'Previews when idle'], ['always', 'Previews any time'], ['off', 'No previews']]) {
+      const opt = h('option', null, label);
+      opt.value = v;
+      prev.append(opt);
+    }
+    prev.value = ['always', 'off'].includes(m.previews) ? m.previews : 'idle';
+    prev.title = 'Previews read each program once from the Data Server. "When idle" reads only while the machine is not running.';
+    prev.setAttribute('aria-label', `Previews for ${m.name}`);
+    prev.addEventListener('change', async () => {
+      try {
+        await api.settings.save({ programs: { machines: { [m.id]: { previews: prev.value } } } });
+        toast(`${m.name}: ${prev.options[prev.selectedIndex].textContent.toLowerCase()}`, { kind: 'ok' });
+      } catch (e) { toast(e?.message ?? 'Not saved', { kind: 'error' }); }
+      loadOverview();
+    });
+    addrTd.append(host, port, mode, prev, save);
     const loginTd = h('td');
     if (m.loginSaved) {
       loginTd.append(h('span', 'prog-saved', 'Saved'));

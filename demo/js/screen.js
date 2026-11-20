@@ -101,7 +101,8 @@ export function resolveScreen(url, settings) {
 
 /**
  * Screen-pixel type scale (D4): fixed sizes derived from the TV diagonal and design viewing distance, never from
- * layout units. Without a profile the scale follows the viewport (1 at 1920 × 1080).
+ * layout units. Without a profile the scale follows the viewport (1 at 1920 × 1080, or 1080 × 1920 on a monitor turned
+ * on its side).
  * @param {{diagonalIn:number|null, designDistanceFt:number|null, scale:number}} profile
  * @param {{width:number, height:number, screenWidth?:number}} viewport  CSS px
  */
@@ -111,6 +112,9 @@ export function computeTypeScale(profile, viewport) {
     const widthMm = (profile.diagonalIn * 25.4 * 16) / Math.hypot(16, 9);
     const px = Math.max(viewport.screenWidth || 0, viewport.width);
     k = (profile.designDistanceFt / REF_DISTANCE_FT) * (px / widthMm / REF_PX_PER_MM);
+  } else if (viewport.height > viewport.width && viewport.width >= 900) {
+    // a monitor on its side: the same design size as 1920 × 1080, turned (1 at 1080 × 1920), not half of it
+    k = Math.min(viewport.width / 1080, viewport.height / 1920);
   } else {
     k = Math.min(viewport.width / 1920, viewport.height / 1080);
   }
@@ -129,6 +133,8 @@ export function applyProfile(profile, scale, root = document.documentElement) {
   root.dataset.view = profile.view;
   root.dataset.motion = effectiveMotion(profile);
   root.style.setProperty('--k', String(scale.k));
+  // the screen's own scale, for what must stay on it inside a drawer (whose --k also carries the Text size, hud.css)
+  root.style.setProperty('--k-screen', String(scale.k));
   root.style.setProperty('--safe', `${profile.safeMarginPct}vmin`);
   for (const [key, v] of Object.entries(scale)) if (key !== 'k') root.style.setProperty(`--fs-${key}`, `${v}px`);
   return theme;

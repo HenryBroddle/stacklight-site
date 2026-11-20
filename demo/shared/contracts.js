@@ -153,6 +153,7 @@ export const SSE_EVENTS = Object.freeze({
   DISCOVERY: 'discovery',
   SETTINGS: 'settings',   // public settings changed (src/server/api.js)
   RUNS: 'runs',           // a program run started, ended, changed or was (in)validated: { run } (DECISIONS D12)
+  MAINTENANCE: 'maintenance', // a machine's maintenance tasks changed: { machineId, counts, total } (DECISIONS D18)
   PING: 'ping',
   SHUTDOWN: 'shutdown',   // sent once when the server closes the stream ({ bootId })
 });

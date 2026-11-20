@@ -1,5 +1,6 @@
 // HUD bootstrap and composition root: loads state + layout, applies the screen profile, wires the floor plan,
-// board, top bar, detail drawer, discovery panel, stale watchdog and SSE, and routes between view and edit mode.
+// board, top bar, the drawers (detail, discovery, runs, programs, maintenance), stale watchdog and SSE, and routes
+// between view and edit mode.
 // Edit mode lazy-loads ./editor/index.js and calls its mountEditor(ctx) (or createEditor/startEditor/default).
 //
 // Views: /?screen=<name> (kiosk implied) and /?layout=<id> are passed to /api/state and /api/events, so the
@@ -12,6 +13,7 @@ import { createDetail } from './detail.js';
 import { createDiscoveryPanel } from './discoveryPanel.js';
 import { createRunsPanel } from './runsPanel.js';
 import { createProgramsPanel } from './programsPanel.js';
+import { createMaintenancePanel } from './maintenancePanel.js';
 import { createWatchdog } from './watchdog.js';
 import { createErrorReporter } from './errorReport.js';
 import { readUrlOptions, resolveScreen, computeTypeScale, applyProfile, effectiveMotion, createChime } from './screen.js';
@@ -21,6 +23,9 @@ import { formatDuration } from '/shared/format.js';
 import { endpointKey } from '/shared/sources.js';
 
 const THEME_KEY = 'machine-shop-hud.theme';
+const TEXT_KEY = 'machine-shop-hud.text-size';
+/** Text sizes offered on the top bar (multipliers of the screen's type scale), kept per browser. */
+const TEXT_SIZES = Object.freeze([0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2]);
 const $ = (id) => document.getElementById(id);
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -38,7 +43,7 @@ const els = {
   root: document.documentElement,
   topbar: $('topbar'), banner: $('banner'), main: $('main'), plan: $('plan'), svg: $('floorplan'),
   planMessage: $('plan-message'), head: $('board-head'), rows: $('board-rows'), editorHost: $('editor-host'),
-  detail: $('detail'), discovery: $('discovery'), runs: $('runs'), programs: $('programs'),
+  detail: $('detail'), discovery: $('discovery'), runs: $('runs'), programs: $('programs'), maintenance: $('maintenance'),
 };
 
 /** Mutable app state (single composition root — no other module holds global state). */
@@ -63,6 +68,7 @@ const state = {
   booted: false,
   lastSettingsJson: '',
   prevDisplayed: new Map(), // id → status last displayed (onsets, feed)
+  maintenance: null,        // GET /api/state maintenance (D18): { enabled, available, counts }; absent on older servers and in the demo
 };
 
 let events = null;
@@ -74,6 +80,7 @@ let detail = null;
 let discovery = null;
 let runsPanel = null;
 let programsPanel = null;
+let maintenancePanel = null;
 let watchdog = null;
 let chime = null;
 let editor = null;
@@ -99,6 +106,36 @@ const clockOpts = () => ({ clock24h: !!display().clock24h, timeZone: typeof disp
 function storedTheme() {
   try { return localStorage.getItem(THEME_KEY); } catch { return null; }
 }
+/** This browser's drawer text size (1 = as designed for the screen). */
+function textSize() {
+  if (sessionTextSize !== null) return sessionTextSize;
+  let v = null;
+  try { v = Number(localStorage.getItem(TEXT_KEY)); } catch { /* per-viewer convenience only */ }
+  return TEXT_SIZES.includes(v) ? v : 1;
+}
+/**
+ * The drawer text size on this screen (top bar Text menu): the drawers and the dialogs they open read it as --ts
+ * (hud.css). The board, the plan and the top bar keep the screen's own scale. TVs in kiosk mode have no drawers.
+ */
+function applyTextSize(profile = state.profile) {
+  const ts = profile?.kiosk ? 1 : textSize();
+  els.root.style.setProperty('--ts', String(ts));
+  topbar?.setTextSize(ts);
+}
+/** Top bar Text menu: -1 smaller, 1 larger, 0 back to 100 %. Returns the new size. */
+function stepTextSize(step) {
+  const cur = textSize();
+  const i = TEXT_SIZES.indexOf(cur);
+  const next = step === 0 ? 1 : TEXT_SIZES[Math.min(TEXT_SIZES.length - 1, Math.max(0, i + Math.sign(step)))];
+  try {
+    if (next === 1) localStorage.removeItem(TEXT_KEY);
+    else localStorage.setItem(TEXT_KEY, String(next));
+  } catch { /* the size still applies until the page reloads */ }
+  sessionTextSize = next;
+  applyTextSize();
+  return next;
+}
+let sessionTextSize = null; // the size chosen on this page (kept when storage is blocked)
 
 function applyScreen() {
   const profile = resolveScreen(url, state.settings);
@@ -106,6 +143,8 @@ function applyScreen() {
     const t = storedTheme();
     if (t === 'dark' || t === 'light') profile.theme = t;
   }
+  // this browser's drawer text size (top bar Text menu); it never changes the screen's own scale
+  applyTextSize(profile);
   state.profile = profile;
   const viewport = { width: window.innerWidth, height: window.innerHeight, screenWidth: window.screen?.width ?? 0 };
   state.scale = computeTypeScale(profile, viewport);
@@ -133,16 +172,32 @@ function layoutGeometry() {
   // narrow portrait screens and phones on their side scroll one column: summary, plan, then machine cards
   const stacked = !state.profile?.kiosk && ((vw < 900 && vw < vh * 1.15) || (vh < 500 && vw < 1100));
   els.root.classList.toggle('stacked', stacked);
+  // a monitor turned on its side (a 1080 × 1920 office monitor, 2026-11-19): the plan across the top, the board
+  // below, instead of a plan squeezed beside a half-width board
+  const portrait = !stacked && !state.profile?.kiosk && !state.editing && vh > vw * 1.15;
+  els.root.classList.toggle('portrait', portrait);
+  fitTopbar();
   if (stacked !== state.compact) {
     state.compact = stacked;
     floorplan?.setOptions({ compact: stacked });
     if (stacked) refreshTodayRuns();
     queueRender();
   }
-  if (stacked) { els.root.style.removeProperty('--board-w'); return; }
+  if (stacked) { els.root.style.removeProperty('--board-w'); els.root.style.removeProperty('--plan-h'); return; }
   const safe = (state.profile.safeMarginPct / 100) * Math.min(vw, vh);
   const topH = els.topbar.getBoundingClientRect().height || 96 * k;
   const gap = 16 * k;
+  if (portrait) {
+    // the plan as wide as the screen, as tall as its proportions need, but never more than 55 % of the height
+    const vbox = floorplan?.getViewBox() ?? { w: 88, h: 68 };
+    const ratio = vbox.w > 0 && vbox.h > 0 ? vbox.w / vbox.h : 1.3;
+    const usableW = vw - 2 * safe - 2.5 * gap;
+    const planH = Math.max(160, Math.min(usableW / ratio, (vh - 2 * safe - topH) * 0.55));
+    els.root.style.setProperty('--plan-h', `${Math.round(planH)}px`);
+    els.root.style.removeProperty('--board-w');
+    return;
+  }
+  els.root.style.removeProperty('--plan-h');
   const planH = vh - 2 * safe - topH - 2 * gap;
   const vb = floorplan?.getViewBox() ?? { w: 88, h: 68 };
   const aspect = vb.w > 0 && vb.h > 0 ? vb.w / vb.h : 1.3;
@@ -152,6 +207,19 @@ function layoutGeometry() {
   const max = avail * 0.46;
   const w = Math.max(min, Math.min(max, avail - planW));
   els.root.style.setProperty('--board-w', `${Math.round(w)}px`);
+}
+
+/**
+ * When the shop name would be cut off or the top bar overflows (a narrow or turned screen, a large text size), its
+ * buttons show icons only (their titles still name them).
+ */
+function fitTopbar() {
+  const bar = els.topbar;
+  if (!bar) return;
+  els.root.classList.remove('topbar-compact');
+  const name = bar.querySelector('.shop-name');
+  const crowded = bar.scrollWidth > bar.clientWidth + 1 || (name && name.scrollWidth > name.clientWidth + 2);
+  els.root.classList.toggle('topbar-compact', !!crowded);
 }
 
 /** A read-only look at another layout (?layout=<id> that is not the active one). */
@@ -168,6 +236,23 @@ function readOnlyView() {
 /** A phone (either way round): no layout editing there — the editor needs room and a pointer. */
 function smallScreen() {
   return Math.min(window.innerWidth, window.innerHeight) < 600;
+}
+/**
+ * Maintenance (D18) shows here: the server has it (state.maintenance) and turned on (settings.maintenance.enabled, which
+ * follows live settings changes), and this is not a TV or a preview of another layout. The public demo has it when its
+ * recording does (D17: the plan stays in the visitor's browser).
+ */
+function maintenanceOn() {
+  if (isPreview() || !state.profile || state.profile.kiosk || !isObj(state.maintenance)) return false;
+  const s = state.settings?.maintenance;
+  return isObj(s) && typeof s.enabled === 'boolean' ? s.enabled : state.maintenance.enabled !== false;
+}
+/** The top bar's Maintenance button and its count of tasks due; the drawer closes when the feature goes away. */
+function syncMaintenance() {
+  const on = maintenanceOn();
+  const due = state.maintenance?.counts?.due;
+  topbar?.setMaintenance({ available: on, due: finite(due) ? due : 0 });
+  if (!on) maintenancePanel?.close();
 }
 /** Layout this display should show. */
 function wantedLayout() {
@@ -344,11 +429,13 @@ function applyState(s) {
   if (Array.isArray(s.agents)) state.agents = s.agents;
   if (isObj(s.tokenHelp)) state.tokenHelp = s.tokenHelp;
   if (typeof s.localEdit === 'boolean') state.localEdit = s.localEdit; // only GET /api/state carries it (D9 amendment)
+  if (Object.hasOwn(s, 'maintenance')) state.maintenance = isObj(s.maintenance) ? s.maintenance : null;
   watchdog?.noteIdentity(s);
   if (isObj(s.discovery)) discovery?.onStatus(s.discovery);
   const want = wantedLayout();
   if (state.booted && want && want !== state.shownLayoutId && !state.editing) loadLayout(want);
   topbar?.setEditable(canEdit());
+  syncMaintenance();
   queueRender();
 }
 
@@ -362,6 +449,7 @@ function applySettings(settings) {
   if (!state.booted) return;
   applyScreen();
   updateSubtitle();
+  syncMaintenance();
 }
 
 let layoutLoading = null;
@@ -472,6 +560,7 @@ function connect() {
         if (followsActive() && !state.editing) events.reconnect();
         updateSubtitle();
         topbar.setEditable(canEdit());
+        syncMaintenance(); // a ?layout= view may have become (or stopped being) a preview
         return;
       }
       if (typeof data.activeLayout === 'string') state.activeLayout = data.activeLayout;
@@ -479,6 +568,15 @@ function connect() {
     },
     discovery(data) { discovery?.onEvent(data); },
     runs(data) { runsPanel?.onEvent(data); detail?.onRunEvent?.(data); noteRun(data?.run); },
+    /** D18 { machineId, counts, total }: the top bar's count, and any open view of that machine refetches */
+    maintenance(data) {
+      if (!isObj(data)) return;
+      if (isObj(state.maintenance) && isObj(data.total)) state.maintenance = { ...state.maintenance, counts: data.total };
+      syncMaintenance();
+      if (!maintenanceOn()) return;
+      maintenancePanel?.onEvent(data);
+      detail?.onMaintenanceEvent?.(data);
+    },
     settings(data) { if (isObj(data?.settings)) { applySettings(data.settings); programsPanel?.onSettings(); } },
     ping(data) { watchdog?.noteIdentity(data); },
     hello(data) { watchdog?.noteIdentity(data); },
@@ -510,8 +608,10 @@ async function enterEditMode() {
   discovery.close();
   runsPanel?.close();
   programsPanel?.close();
+  maintenancePanel?.close();
   state.editing = true;
   els.root.classList.add('editing');
+  layoutGeometry(); // a portrait screen edits in the usual side-by-side layout
   els.editorHost.hidden = false;
   floorplan.setOptions({ rotation: 0, region: null });
   floorplan.setMode('edit');
@@ -530,6 +630,7 @@ async function exitEditMode({ layout } = {}) {
   editor = null;
   state.editing = false;
   els.root.classList.remove('editing');
+  layoutGeometry();
   els.editorHost.replaceChildren();
   els.editorHost.hidden = true;
   floorplan.setMode('view');
@@ -620,10 +721,12 @@ async function fetchInitialState() {
 async function boot() {
   api.setTokenProvider(tokenProvider);
   topbar = createTopBar(els.topbar, {
-    onDiscovery: () => { detail.close(); runsPanel?.close(); programsPanel?.close(); discovery.toggle(); },
-    onRuns: () => { detail.close(); discovery.close(); programsPanel?.close(); runsPanel?.toggle(); },
+    onDiscovery: () => { detail.close(); runsPanel?.close(); programsPanel?.close(); maintenancePanel?.close(); discovery.toggle(); },
+    onRuns: () => { detail.close(); discovery.close(); programsPanel?.close(); maintenancePanel?.close(); runsPanel?.toggle(); },
+    onMaintenance: () => { detail.close(); discovery.close(); runsPanel?.close(); programsPanel?.close(); maintenancePanel?.toggle(); },
     onEdit: () => enterEditMode(),
     onTheme: toggleTheme,
+    onTextSize: stepTextSize,
     onSound: async () => { if (chime) { await chime.unlock(); topbar.setSound(chime.blocked ? 'blocked' : 'on'); } },
   });
   banner = createBanner(els.banner);
@@ -645,10 +748,10 @@ async function boot() {
 
   floorplan = createFloorplan(els.svg, {
     compact: state.compact,
-    onMachineClick: (id) => { if (!state.profile.kiosk) { discovery.close(); runsPanel.close(); programsPanel.close(); detail.open(id); } },
+    onMachineClick: (id) => { if (!state.profile.kiosk) { discovery.close(); runsPanel.close(); programsPanel.close(); maintenancePanel.close(); detail.open(id); } },
     onBackgroundClick: () => detail.close(),
   });
-  board = createBoard(els.head, els.rows, { onSelect: (id) => { discovery.close(); runsPanel.close(); programsPanel.close(); detail.open(id); } });
+  board = createBoard(els.head, els.rows, { onSelect: (id) => { discovery.close(); runsPanel.close(); programsPanel.close(); maintenancePanel.close(); detail.open(id); } });
   detail = createDetail(els.detail, {
     api,
     getMachine: (id) => {
@@ -661,9 +764,14 @@ async function boot() {
     readOnly: readOnlyView,
     // program transfer: off in a preview; in the demo the explorer only (its Data Servers are simulated, no setup)
     programsMode: () => (isPreview() ? 'off' : DEMO ? 'use' : 'full'),
-    onRunReport: (id) => { detail.close(); discovery.close(); runsPanel.open({ machine: id }); },
+    onRunReport: (id) => { detail.close(); discovery.close(); maintenancePanel.close(); runsPanel.open({ machine: id }); },
     // program transfer (D16): the Programs drawer for this machine, or its setup
-    onPrograms: (id, opts) => { detail.close(); discovery.close(); runsPanel.close(); programsPanel.open(id, opts); },
+    onPrograms: (id, opts) => { detail.close(); discovery.close(); runsPanel.close(); maintenancePanel.close(); programsPanel.open(id, opts); },
+    // maintenance (D18): the section shows when the feature does; it opens the drawer on this machine, or its Set up
+    maintenance: maintenanceOn,
+    // the demo's maintenance plan lives in the visitor's browser, so it can be changed there (D17)
+    maintenanceReadOnly: isPreview,
+    onMaintenance: (id, opts) => { detail.close(); discovery.close(); runsPanel.close(); programsPanel.close(); maintenancePanel.open({ machine: id, view: opts?.view }); },
     toast,
   });
   discovery = createDiscoveryPanel(els.discovery, {
@@ -690,6 +798,23 @@ async function boot() {
     getMachines: () => (Array.isArray(state.layout?.machines) ? state.layout.machines : []).filter((m) => m && typeof m.id === 'string'),
     requestToken: () => tokenProvider({ status: 0, path: '', message: 'Programs need the edit token.' }),
     demo: DEMO,
+    toast,
+  });
+
+  maintenancePanel = createMaintenancePanel(els.maintenance, {
+    api,
+    getContext: () => ({ settings: state.settings, now: serverNow(), theme: state.theme, kiosk: !!state.profile.kiosk }),
+    getMachines: () => (Array.isArray(state.layout?.machines) ? state.layout.machines : [])
+      .filter((m) => m && typeof m.id === 'string')
+      .map((m) => ({ id: m.id, name: typeof m.name === 'string' && m.name ? m.name : m.id })),
+    // editable in the demo too: its plan lives in the visitor's browser (D17)
+    readOnly: isPreview,
+    // every load of all machines brings their counts: the top bar's badge follows at once
+    onCounts: (counts) => {
+      if (!isObj(state.maintenance) || !isObj(counts)) return;
+      state.maintenance = { ...state.maintenance, counts };
+      syncMaintenance();
+    },
     toast,
   });
 
@@ -751,9 +876,9 @@ async function boot() {
   });
   globalThis.matchMedia?.('(prefers-color-scheme: light)').addEventListener?.('change', () => { if (state.profile.theme === 'auto') applyScreen(); });
   globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => applyScreen());
-  document.fonts?.addEventListener?.('loadingdone', () => { resetTextMetrics(); floorplan.relayout(); board.refit(); });
+  document.fonts?.addEventListener?.('loadingdone', () => { resetTextMetrics(); floorplan.relayout(); board.refit(); fitTopbar(); });
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape') { detail.close(); discovery.close(); runsPanel.close(); programsPanel.close(); }
+    if (ev.key === 'Escape') { detail.close(); discovery.close(); runsPanel.close(); programsPanel.close(); maintenancePanel.close(); }
   });
   if (state.profile.edit) enterEditMode();
 }

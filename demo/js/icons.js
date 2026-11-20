@@ -76,6 +76,25 @@ const ICONS = {
   lock: [{ s: 'M7.5 11 V7.5 A4.5 4.5 0 0 1 16.5 7.5 V11', w: 2.2 }, { f: 'M5 11 H19 V21 H5 Z' }],
   file: [{ s: 'M14 3 H6.5 V21 H17.5 V6.5 Z M14 3 V6.5 H17.5', w: 2 }],
   sliders: [{ s: 'M4 7 H20 M4 17 H20', w: 2 }, { sc: [9, 7, 2.6] }, { sc: [15, 17, 2.6] }],
+  // Text size: a large and a small A.
+  'text-size': [{ s: 'M2.5 20 L8.5 4 L14.5 20 M4.8 14.2 H12.2', w: 2.2 }, { s: 'M14.5 20 L18 11.2 L21.5 20 M15.7 17 H20.3', w: 1.9 }],
+  // Maintenance (public/js/maintenancePanel.js, DECISIONS D18): an oil can with a drop (the wrench is SETUP). The task
+  // pills use the glyphs below, none of them a status silhouette: flag (due), clock (due soon), hourglass (needs a
+  // start), gauge (not counting), check (OK), bell (on alarm), info (as needed), switch (off).
+  oilcan: [
+    { f: 'M2.8 11.6 H12.6 L16.2 14.6 V19.4 H2.8 Z' },
+    { f: 'M6 8.6 H9.8 V11.6 H6 Z' },
+    { s: 'M15.6 15 L21.2 10.2', w: 2.2 },
+    { f: 'M21 12.6 C21.9 13.8 22.5 14.7 22.5 15.4 A1.5 1.5 0 0 1 19.5 15.4 C19.5 14.7 20.1 13.8 21 12.6 Z' },
+  ],
+  flag: [{ s: 'M5 21.5 V3', w: 2.2 }, { f: 'M6.1 3.8 H19.2 L15.8 8.4 L19.2 13 H6.1 Z' }],
+  bell: [{ s: 'M6.2 16.8 V11 A5.8 5.8 0 0 1 17.8 11 V16.8 L19.4 18.6 H4.6 Z', w: 2 }, { s: 'M10 21 A2 2 0 0 0 14 21 M12 3 V5.2', w: 2 }],
+  hourglass: [{ s: 'M6 3.5 H18 M6 20.5 H18', w: 2.2 }, { s: 'M7.6 3.5 V6.6 L12 12 L16.4 6.6 V3.5 M7.6 20.5 V17.4 L12 12 L16.4 17.4 V20.5', w: 1.9 }, { f: 'M9.3 19.3 L12 16.1 L14.7 19.3 Z' }],
+  gauge: [{ s: 'M4.2 17.5 A8.6 8.6 0 1 1 19.8 17.5', w: 2.2 }, { s: 'M12 13.9 L16.2 9.2', w: 2.2 }, { sc: [12, 13.9, 1.9] }],
+  'toggle-off': [{ s: 'M8 7 H16 A5 5 0 0 1 16 17 H8 A5 5 0 0 1 8 7 Z', w: 2 }, { sc: [8.3, 12, 2.6] }],
+  external: [{ s: 'M13.5 4.5 H19.5 V10.5 M19.5 4.5 L11.5 12.5', w: 2.1 }, { s: 'M17.5 13.5 V19.5 H4.5 V6.5 H10.5', w: 2.1 }],
+  plus: [{ s: 'M12 5 V19 M5 12 H19', w: 2.4 }],
+  chevron: [{ s: 'M9 5.5 L15.5 12 L9 18.5', w: 2.4 }],
 };
 
 /** All icon names. */

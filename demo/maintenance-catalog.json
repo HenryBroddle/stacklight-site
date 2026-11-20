@@ -1,0 +1,1804 @@
+{
+ "format": 1,
+ "version": "2026-11-19",
+ "about": "Maintenance tasks from published manufacturer documents. Each quote, page and interval was checked against the document by a second reader on the date shown. The machine’s own manual comes first.",
+ "sources": [
+  {
+   "id": "haas-96-8200",
+   "title": "Mill Operator's Manual (Classic control)",
+   "number": "96-8200 Rev B",
+   "edition": "October 2014",
+   "publisher": "Haas Automation",
+   "kind": "pdf",
+   "url": "https://www.haascnc.com/content/dam/haascnc/en/service/manual/operator/english---mill-operator%27s-manual---2014.pdf",
+   "appliesTo": "Haas vertical mills with the Classic control. The 2014 edition, the closest to a 2015 VF-2.",
+   "note": "Chapter 7 is the maintenance schedule; Haas sends readers to haascnc.com for the procedures.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "haas-96-8100",
+   "title": "VF Series Service Manual",
+   "number": "96-8100 Rev E",
+   "edition": "June 2002",
+   "publisher": "Haas Automation",
+   "host": "UC Berkeley Mechanical Engineering (a copy from the Haas manual archive)",
+   "kind": "pdf",
+   "url": "https://me.berkeley.edu/wp-content/uploads/2020/09/Haas-VF-Series-Product-Manual-2002.pdf",
+   "appliesTo": "Haas VF mills with the Classic control. Used for the numbered alarm list only.",
+   "note": "Haas: publications are intended for use only with machines built at the time of original publication. Check each alarm number on your control.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "fanuc-robodrill-pm",
+   "title": "ROBODRILL Preventive Maintenance (flyer)",
+   "number": "MFL-04607-EN",
+   "edition": "05/2026",
+   "publisher": "FANUC Europe",
+   "kind": "pdf",
+   "url": "https://d16ohktstcjvly.cloudfront.net/asset/513891251684/document_luusg84c0p7v3cfapasthc7u63",
+   "pageUrl": "https://www.fanuc.eu/eu-en/accessory/software/robodrill-preventive-maintenance",
+   "appliesTo": "All FANUC ROBODRILL models. The checklist of FANUC’s preventive-maintenance visit.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "fanuc-robodrill-catalog",
+   "title": "ROBODRILL α-DiB5 series catalog",
+   "number": "RDRILLA-DiB5(E)-03",
+   "edition": "2018.9",
+   "publisher": "FANUC",
+   "kind": "pdf",
+   "url": "https://www.fanuc.com/fin/id/product/catalog/RDRILLA-DiB5(E)-03.pdf",
+   "appliesTo": "ROBODRILL α-D14/α-D21 SiB5, MiB5 and LiB5.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "fanuc-b85444en-3",
+   "title": "ROBODRILL α-DiB5/α-DiB series Custom PMC Function Operator’s Manual",
+   "number": "B-85444EN-3/04",
+   "edition": "Dec. 2019",
+   "publisher": "FANUC",
+   "kind": "pdf",
+   "appliesTo": "ROBODRILL α-D14/α-D21 MiB5, LiB5 and SiB5.",
+   "note": "FANUC gives this manual to its customers (MyFANUC). It is cited, not linked: the only public copy found is on a third-party site.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "fanuc-robocut-pm",
+   "title": "ROBOCUT Preventive Maintenance (flyer)",
+   "number": "MFL-04609-EN",
+   "edition": "05/2026",
+   "publisher": "FANUC Europe",
+   "kind": "pdf",
+   "url": "https://d16ohktstcjvly.cloudfront.net/asset/513891251684/document_5stmsgunet0nldopv11q38o17d",
+   "pageUrl": "https://www.fanuc.eu/eu-en/accessory/software/robocut-preventive-maintenance",
+   "appliesTo": "FANUC ROBOCUT. The checklist of FANUC’s preventive-maintenance visit.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "fanuc-robocut-catalog",
+   "title": "ROBOCUT α-CiC series catalog",
+   "number": "RCUT-CiC(E)-07",
+   "edition": "2026.6",
+   "publisher": "FANUC",
+   "kind": "pdf",
+   "url": "https://www.fanuc.co.jp/en/product/catalog/pdf/robocut/RCUT-CiC(E)-07.pdf",
+   "appliesTo": "ROBOCUT α-C400iC, α-C600iC and α-C800iC.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "fanuc-america-robocut",
+   "title": "ROBOCUT Wire EDM (product page)",
+   "publisher": "FANUC America",
+   "kind": "web",
+   "url": "https://www.fanucamerica.com/products/robocut",
+   "appliesTo": "FANUC ROBOCUT (the page text was written for the α-CiB series).",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "fanuc-b64485en",
+   "title": "FANUC Series 30i/31i/32i-MODEL B Maintenance Manual",
+   "number": "B-64485EN/01",
+   "edition": "Jul. 2010",
+   "publisher": "FANUC",
+   "kind": "pdf",
+   "appliesTo": "FANUC Series 30i-B, 31i-B5, 31i-B and 32i-B controls and their αi/βi amplifiers.",
+   "note": "FANUC supplies this manual with the machine. It is cited, not linked: the only public copy found is on a third-party site.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "okuma-osp-u100m",
+   "title": "CNC Systems OSP-U100M/OSP-U10M Operation Manual",
+   "number": "Pub. No. 4203-E",
+   "edition": "1st edition, Apr. 1998",
+   "publisher": "Okuma",
+   "host": "Worcester Polytechnic Institute (a ManualsLib copy)",
+   "kind": "pdf",
+   "url": "https://vjmedia.wpi.edu/images/7/7f/Ospu100m.pdf",
+   "appliesTo": "Okuma machining centers (its safety precautions are Okuma’s general ones). An older control than the MB-4000H’s.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "okuma-genos-m560v",
+   "title": "Vertical Machining Center GENOS M560-V Operation & Maintenance",
+   "number": "Pub No. 5762-E-R2",
+   "edition": "3rd edition, Aug. 2011",
+   "publisher": "Okuma",
+   "host": "ManualsLib",
+   "kind": "web",
+   "url": "https://www.manualslib.com/manual/3439586/Okuma-Genos-M560-V.html",
+   "appliesTo": "The Okuma GENOS M560-V: a related Okuma machine, not the MB-4000H.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "okuma-vtm200",
+   "title": "Vertical Multitasking Machine VTM-200 Operation & Maintenance",
+   "number": "Pub No. 5699-E",
+   "edition": "1st edition, Dec. 2009",
+   "publisher": "Okuma",
+   "host": "ManualsLib",
+   "kind": "web",
+   "url": "https://www.manualslib.com/manual/3329626/Okuma-Vtm-200.html",
+   "appliesTo": "The Okuma VTM-200 (OSP-P200): a related Okuma machine, not the MB-4000H.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "mmt-edm-four-areas",
+   "title": "Four Key Areas of EDM Maintenance",
+   "edition": "MoldMaking Technology, 11/12/2010",
+   "publisher": "MoldMaking Technology (Gardner Business Media); article by Greg Langenhorst",
+   "kind": "web",
+   "url": "https://www.moldmakingtechnology.com/articles/four-key-areas-of-edm-maintenance",
+   "appliesTo": "Wire EDM machines in general. Trade guidance, not from FANUC.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "methods-pm",
+   "title": "Preventive Maintenance (service page)",
+   "publisher": "Methods Machine Tools",
+   "kind": "web",
+   "url": "https://www.methodsmachine.com/preventive-maintenance/",
+   "appliesTo": "Methods sells and services YASDA and KIWA machines in North America. The page gives no intervals.",
+   "accessed": "2026-11-19"
+  },
+  {
+   "id": "methods-kh4500kai",
+   "title": "KH-4500kai (product page)",
+   "publisher": "Methods Machine Tools",
+   "kind": "web",
+   "url": "https://www.methodsmachine.com/machines/kh-4500kai/",
+   "appliesTo": "KIWA KH-4500kai, US specification.",
+   "accessed": "2026-11-19"
+  }
+ ],
+ "controls": [
+  {
+   "id": "fanuc-30i-b",
+   "label": "FANUC Series 30i/31i/32i-MODEL B",
+   "match": {
+    "manufacturer": "fanuc",
+    "model": "\\b3[012]i-?B(?:5|\\b)",
+    "notModel": "\\(W\\)|3[012]i-?W"
+   }
+  }
+ ],
+ "models": [
+  {
+   "id": "haas-vf-classic",
+   "label": "Haas VF mill (Classic control)",
+   "make": "Haas",
+   "control": null,
+   "match": {
+    "make": "haas",
+    "model": "\\bVF-?\\d"
+   },
+   "kinds": [
+    "3-axis",
+    "4-axis",
+    "5-axis"
+   ],
+   "note": "From the 2014 Classic-control manual. NGC machines have their own manual."
+  },
+  {
+   "id": "fanuc-robodrill",
+   "label": "FANUC ROBODRILL (α-DiB5 series)",
+   "make": "FANUC",
+   "control": "fanuc-30i-b",
+   "match": {
+    "make": "robodrill",
+    "model": "\\bD(?:14|21)[LMS]iB5?\\b"
+   },
+   "kinds": [
+    "3-axis",
+    "4-axis",
+    "5-axis"
+   ],
+   "note": "If the machine has FANUC’s optional rechargeable battery unit, the battery replacements do not apply."
+  },
+  {
+   "id": "fanuc-robocut",
+   "label": "FANUC ROBOCUT (α-CiC series)",
+   "make": "FANUC",
+   "control": null,
+   "match": {
+    "make": "robocut",
+    "model": "\\bC(?:400|600|800)i[BC]\\b"
+   },
+   "kinds": [
+    "wire-edm",
+    "edm"
+   ],
+   "note": "The ROBOCUT counts its own consumables (wire guides, power feed contacts, filters, resin): check its maintenance screen."
+  },
+  {
+   "id": "okuma-mb-h",
+   "label": "Okuma MB-H horizontal machining center",
+   "make": "Okuma",
+   "control": null,
+   "match": {
+    "make": "okuma",
+    "model": "\\bMB-?\\d{4,5}H\\b"
+   },
+   "kinds": [
+    "4-axis",
+    "5-axis"
+   ],
+   "note": "Okuma’s MB-4000H manual is not public. These tasks come from manuals of related Okuma machines: check them against your own manual."
+  },
+  {
+   "id": "yasda-px30i",
+   "label": "YASDA PX30i",
+   "make": "YASDA",
+   "control": "fanuc-30i-b",
+   "match": {
+    "make": "yasda",
+    "model": "\\bPX-?30i\\b"
+   },
+   "kinds": [
+    "5-axis"
+   ],
+   "note": "YASDA gives its maintenance manuals to owners only. Add the PX30i’s own schedule from your manual set.",
+   "service": "methods-pm"
+  },
+  {
+   "id": "kiwa-kh4500kai",
+   "label": "KIWA KH-4500kai",
+   "make": "KIWA",
+   "control": "fanuc-30i-b",
+   "match": {
+    "make": "kiwa",
+    "model": "\\bKH-?4500"
+   },
+   "kinds": [
+    "4-axis",
+    "5-axis"
+   ],
+   "note": "KIWA gives its maintenance manuals to owners only. Add the KH-4500kai’s own schedule from your manual set.",
+   "service": "methods-pm",
+   "facts": [
+    {
+     "label": "Coolant tank",
+     "value": "550 L (145.3 gal)",
+     "source": "methods-kh4500kai",
+     "locator": "Technical product details & specs, General"
+    }
+   ]
+  }
+ ],
+ "tasks": [
+  {
+   "id": "fanuc-30i-b/cnc-battery",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "Replace the CNC memory backup battery",
+   "action": "Replace the control unit’s lithium memory-backup battery once a year, even without a BAT alarm. Back up the CNC data first. Section 3.10 of the manual has the steps and part numbers.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "year"
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "3.10 Replacing the memory backup battery in the control unit, pp. 270–271",
+    "quote": "For this reason, FANUC recommends that the battery be replaced once per year regardless of whether a battery alarm is issued.",
+    "asStated": "once per year regardless of whether a battery alarm is issued"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/apc-batteries",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "Replace the absolute Pulsecoder (APC) batteries",
+   "action": "Replace the batteries that keep the axes’ absolute positions. Batteries built into the amplifier (A06B-6114-K504) last about a year per three axes; a separate case of D cells (A06B-6050-K061) about two years per six axes. Change them with the power on and the machine in emergency stop, or the positions are lost.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "year"
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "4.7 Replacing battery for absolute Pulsecoders, 4.7.1 Overview, p. 316",
+    "quote": "In general, replace the batteries periodically within the service life listed below. - A06B-6050-K061 or D-size alkaline dry cells (LR20) : Two years (for each six-axis configuration) - A06B-6114-K504 : One year (for each three-axis configuration)",
+    "asStated": "A06B-6114-K504 : One year (for each three-axis configuration); A06B-6050-K061 or D-size alkaline dry cells (LR20) : Two years (for each six-axis configuration)"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/bat-alarm",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "BAT alarm: replace the CNC memory battery",
+   "action": "BAT blinks on the screen when the memory-backup battery runs low. Replace it as soon as possible, normally within a week; if the voltage keeps falling, the CNC memory is lost.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "BAT",
+      "notText": "absolute"
+     }
+    ],
+    "within": {
+     "value": 1,
+     "unit": "week"
+    }
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "3.10, p. 270 (the BAT flag: 1.4 CNC state display, p. 45)",
+    "quote": "When the battery voltage falls, alarm message \"BAT\" blinks on the LCD screen and the battery alarm signal is output to the PMC. Once the alarm message starts blinking or the alarm signal is output, replace the battery as soon as possible. In general, the battery can be replaced within one week of the alarm first being issued.",
+    "asStated": "as soon as possible … within one week of the alarm first being issued"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/apc-alarm",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "APC battery alarm (DS0306, DS0307, DS0308): replace the APC batteries",
+   "action": "DS0307: the absolute Pulsecoder batteries are low. Replace them with the power on, normally within one to two weeks. DS0306: the voltage reached zero and the axis positions are lost; replace the batteries or check the cable, then return the axes to their reference positions. DS0308: the voltage was low at some point, even while the machine was off; replace the batteries.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "DS0306"
+     },
+     {
+      "code": "DS0307"
+     },
+     {
+      "code": "DS0308"
+     },
+     {
+      "code": "BAT",
+      "text": "absolute"
+     }
+    ],
+    "within": {
+     "value": 1,
+     "unit": "week"
+    }
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "4.7.1 Overview, p. 316; Appendix A alarm list, p. 678",
+    "quote": "When alarm 307 (alarm indicating the voltage of the battery becomes low) occurs, replace the battery as soon as possible. In general, the battery should be replaced within one or two weeks, however, this depends on the number of Pulsecoders used.",
+    "asStated": "as soon as possible … within one or two weeks"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/cnc-fan",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "FAN warning or OH0701: replace the control unit fan",
+   "action": "FAN blinks when a fan on the CNC control unit slows down; OH0701 means a fan stopped. Replace the fan motor as soon as the warning appears, with the power off. If the fan stops completely, the CNC stops on an overheat or system alarm.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "FAN"
+     },
+     {
+      "code": "OH0701"
+     }
+    ],
+    "within": null
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "3.11 Replacing a fan, p. 274; alarm OH0701, p. 565",
+    "quote": "When a reduction in the speed of the fan motor is detected, the FAN warning message blinks on the LCD screen. When a failure such as stop of the fan motor is detected, an overheat alarm or system alarm is issued and the system stops operating. Therefore, as soon as the FAN warning appears, replace the fan motor.",
+    "asStated": "as soon as the FAN warning appears"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/cabinet-overheat",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "OH0700 (cabinet overheat): cool the CNC cabinet",
+   "action": "The air around the CNC control unit is too hot. Bring the cabinet back to 0–58 °C (LCD-mounted unit) or 0–55 °C (stand-alone unit). The cabinet fans, filter mats and heat exchanger are the usual places to look.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "OH0700"
+     }
+    ],
+    "within": null
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "10.18 Alarm OH0700, p. 564",
+    "quote": "This alarm is issued if the ambient temperature of the CNC control unit is abnormally high. … Take appropriate action to the cabinet that houses the CNC control unit so that the temperature falls within the proper temperature range (0 to 58°C (for LCD-mounted type) or 0 to 55°C (for stand-alone type)).",
+    "asStated": "on alarm"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/amp-fans",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "Amplifier fan failure (DS0608–DS0611): replace the fan",
+   "action": "A fan in a servo amplifier (DS0608, DS0609) or the power supply (DS0610, DS0611) has failed. Replace it: an internal-fan failure turns the servo off after one minute.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "DS0608"
+     },
+     {
+      "code": "DS0609"
+     },
+     {
+      "code": "DS0610"
+     },
+     {
+      "code": "DS0611"
+     }
+    ],
+    "within": null
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "Appendix A alarm list, p. 679; 8. Digital servo, p. 507",
+    "quote": "DS0608 | SV COOLING FAN FAILURE | Internal agitating fan failure. DS0609 | SV RADIATOR FAN FAILURE | Radiator cooling fan failure. DS0610 | PS INTERNAL FAN FAILURE | Internal agitating fan failure. DS0611 | PS EXTERNAL FAN FAILURE | External radiator cooling fan failure.",
+    "asStated": "on alarm (internal-fan warnings escalate after one minute)"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/spindle-amp-fans",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "Spindle amplifier fan failure (SP9056, SP9059, SP9088, SP9113)",
+   "action": "A spindle amplifier or power supply fan has stopped. SP9056: replace the spindle amplifier’s internal fan. SP9088: its radiator fan. SP9113: the power supply’s external radiator fan. SP9059: the manual says to replace the power supply.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "SP9056"
+     },
+     {
+      "code": "SP9059"
+     },
+     {
+      "code": "SP9088"
+     },
+     {
+      "code": "SP9113"
+     }
+    ],
+    "within": null
+   },
+   "suggest": true,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "Appendix A alarm list, pp. 719–722",
+    "quote": "SP9056 | COOLING FAN FAILURE | 56 | Replace the internal cooling fan. | The internal cooling fan stopped. … SP9088 | COOLING RADI FAN FAILURE | 88 | Replace the Spindle Amplifier radiator cooling fan. | The radiator cooling fan stopped.",
+    "asStated": "on alarm"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "fanuc-30i-b/backup",
+   "for": [
+    "control:fanuc-30i-b"
+   ],
+   "title": "Back up programs, offsets and parameters",
+   "action": "FANUC says to back up regularly but gives no interval: set one that suits the shop. The control can also back itself up every so many days (parameter 10341).",
+   "kind": "as-needed",
+   "suggest": false,
+   "scope": "control",
+   "source": {
+    "ref": "fanuc-b64485en",
+    "locator": "Safety precautions, p. s-5; 5.3 Automatic data backup, p. 330",
+    "quote": "Back up the data (programs, offset values, and parameters) regularly. … When automatic data backup is performed periodically, this parameter sets the interval as the number of days.",
+    "asStated": "regularly (no interval given); automatic backup interval set in days by parameter No. 10341"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "robodrill/pm-service",
+   "for": [
+    "model:fanuc-robodrill"
+   ],
+   "title": "Preventive maintenance service (2,000 h or yearly)",
+   "action": "FANUC’s checklist: replace the control cabinet filter mats; replace the CNC and Pulsecoder batteries; check the CNC, amplifier and spindle motor fans; check the central lubrication; service the air unit and dehumidifier; grease the tool changer; measure the tool pull-in force and spindle runout; inspect the way wipers, LM guides and ball screws; check geometry and level; back up programs and parameters; reset the maintenance counters. Periodical maintenance is for a FANUC-trained technician.",
+   "kind": "interval",
+   "basis": "operating",
+   "every": {
+    "value": 2000,
+    "unit": "hour"
+   },
+   "orEvery": {
+    "value": 1,
+    "unit": "year"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "fanuc-robodrill-pm",
+    "locator": "p. 1 and the checklist on p. 2",
+    "page": 1,
+    "quote": "Maintenance intervals are adapted to the customer-specific, operational requirements after consultation (approx. every 2,000 operating hours or 1x per year).",
+    "asStated": "approx. every 2,000 operating hours or 1x per year"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "robodrill/axis-covers",
+   "for": [
+    "model:fanuc-robodrill"
+   ],
+   "title": "Check inside the axis covers for chips",
+   "action": "Look inside each axis cover and casting for chips every six months and remove any you find. Sweep chips out of the machine often.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 6,
+    "unit": "month"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "fanuc-b85444en-3",
+    "locator": "Safety precautions, note 12, p. s-20",
+    "quote": "Sweep off chips from the inside of the machine frequently. Check the inside of each axis cover and casting for any chips semiannually. If chips are found inside any axis cover or casting, remove them.",
+    "asStated": "semiannually"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "robodrill/leakage",
+   "for": [
+    "model:fanuc-robodrill"
+   ],
+   "title": "Insulation (leakage) warning: have the motor and cable checked",
+   "action": "The Robodrill watches the insulation of each motor and motor power cable. When it warns that the insulation is dropping, have that motor or cable checked or replaced before it fails.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "INSULATION"
+     }
+    ],
+    "within": null
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "fanuc-robodrill-catalog",
+    "locator": "p. 7, Complete preventive maintenance",
+    "page": 7,
+    "quote": "● Leakage Detection Function ・Early detection of insulation resistance drop of each motor and motor power cable ・Enable preventive maintenance before breakdown",
+    "asStated": "condition-based, on detection (no interval)"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "robocut/pm-service",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Preventive maintenance service (2,000 h or yearly)",
+   "action": "FANUC’s checklist: lubricate all axes; check the safety equipment and collision protection; check the cooling fans (generator, CNC, amplifiers, pumps); clean the conductivity sensor; check and correct the levelling; service the automatic wire feeder and wire tension; deep-clean the upper and lower guide heads; check the work-tank door and arm seals; clean the float switch; service the wire take-off rollers; replace the cooler and CNC filter mats; replace the CNC and Pulsecoder batteries; back up all data including SRAM; inspect the motor and earth cables.",
+   "kind": "interval",
+   "basis": "operating",
+   "every": {
+    "value": 2000,
+    "unit": "hour"
+   },
+   "orEvery": {
+    "value": 1,
+    "unit": "year"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "fanuc-robocut-pm",
+    "locator": "p. 1 and the checklist on p. 2",
+    "page": 1,
+    "quote": "Maintenance intervals are adapted to the customer-specific, operational requirements after consultation (approx. every 2,000 operating hours or 1x per year).",
+    "asStated": "approx. every 2,000 operating hours or 1x per year"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "robocut/weekly-cleaning",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Weekly cleaning",
+   "action": "Clean the machine weekly. FANUC says it takes less than an hour; the machine’s maintenance guidance screen shows the steps.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "week"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "fanuc-america-robocut",
+    "locator": "Easy Wire EDM Maintenance",
+    "quote": "Easy Wire EDM Maintenance … Maintaining FANUC ROBOCUT only requires a few simple steps, with weekly cleaning taking less than an hour.",
+    "asStated": "weekly cleaning taking less than an hour"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "robocut/consumables",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Check consumable lives on the CNC screen",
+   "action": "The ROBOCUT tracks the life of its consumable parts on its own consumables-management screen, and its maintenance guidance screen shows the daily maintenance with pictures. FANUC does not publish the default lives.",
+   "kind": "as-needed",
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "fanuc-robocut-catalog",
+    "locator": "p. 5 (printed pp. 8–9), Various functions to support daily maintenance",
+    "page": 5,
+    "quote": "Various functions to support daily maintenance … Consumables management … For monitoring the lives of consumable parts … Maintenance guidance … Provides the daily maintenance with pictures and drawings.",
+    "asStated": "No interval stated; the CNC monitors consumable-part lives"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "wire-edm/conductivity-sensor",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Clean the conductivity sensor",
+   "action": "Clean the conductivity sensor in the clean tank. It takes about 10 minutes.",
+   "kind": "interval",
+   "basis": "operating",
+   "every": {
+    "value": 300,
+    "unit": "hour"
+   },
+   "suggest": false,
+   "scope": "general",
+   "source": {
+    "ref": "mmt-edm-four-areas",
+    "locator": "2. Cleanliness",
+    "quote": "The conductivity sensor is located in the clean tank of the fluid system. … A conductivity sensor requires about 10 minutes to clean and should be done every 300 hours.",
+    "asStated": "every 300 hours"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "wire-edm/lower-arm",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Clean the lower arm and head",
+   "action": "Clean the lower arm and lower head, which collect dirt from being submerged. It takes about 15 minutes.",
+   "kind": "interval",
+   "basis": "operating",
+   "every": {
+    "value": 500,
+    "unit": "hour"
+   },
+   "suggest": false,
+   "scope": "general",
+   "source": {
+    "ref": "mmt-edm-four-areas",
+    "locator": "2. Cleanliness",
+    "quote": "The lower arm and head can accumulate excessive dirt from being submerged. … It takes about 15 minutes to clean these areas and should be performed every 500 hours.",
+    "asStated": "every 500 hours"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "wire-edm/filter-tank",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Drain and refill the filter tank",
+   "action": "Drain the filter tank, wipe out the sludge and refill it with DI water.",
+   "kind": "interval",
+   "basis": "operating",
+   "every": {
+    "value": 1000,
+    "unit": "hour"
+   },
+   "suggest": false,
+   "scope": "general",
+   "source": {
+    "ref": "mmt-edm-four-areas",
+    "locator": "Photo caption at the top of the article",
+    "quote": "Avoid buildup of sludge and debris inside your filter tank by simply draining, wiping and refilling with DI water about every 1,000 hours.",
+    "asStated": "about every 1,000 hours"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "wire-edm/power-feed-cables",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Replace the power feed cables",
+   "action": "Replace the cables that carry the cutting current from the power supply to the machine heads.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 3,
+    "unit": "year"
+   },
+   "suggest": false,
+   "scope": "general",
+   "source": {
+    "ref": "mmt-edm-four-areas",
+    "locator": "3. Mechanical Operation",
+    "quote": "Power feed cables bring the cutting current to the machine heads from the power supply. … It’s recommended that these be replaced every three years.",
+    "asStated": "every three years"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "wire-edm/resin",
+   "for": [
+    "model:fanuc-robocut"
+   ],
+   "title": "Conductivity too high: exchange the DI resin",
+   "action": "When the machine warns that the water’s conductivity is too high, exchange the ion-exchange (DI) resin. It takes about 10 minutes.",
+   "kind": "as-needed",
+   "suggest": false,
+   "scope": "general",
+   "source": {
+    "ref": "mmt-edm-four-areas",
+    "locator": "1. Consumables",
+    "quote": "Resin exchange is required when the machine puts up a warning that the conductivity level is too high. Change time is only about 10 minutes.",
+    "asStated": "when the machine puts up a warning that the conductivity level is too high"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/coolant-level",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Check the coolant level",
+   "action": "Check the coolant level each eight-hour shift, more often under heavy through-spindle coolant use. With an auxiliary filter, don’t fill the tank to the top at the end of the day: about 5 gal drains back overnight.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "day"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.2 Daily maintenance, p. 375",
+    "page": 395,
+    "quote": "7.2 Daily Maintenance • Check the coolant level each eight-hour shift (especially during heavy TSC usage). NOTE: If your coolant system includes an auxiliary filter, do not completely fill the coolant tank at the end of the operating day. The auxiliary filter will drain approximately (5) gallons (19 liters) of coolant back into the coolant tank overnight.",
+    "asStated": "Daily Maintenance: each eight-hour shift (especially during heavy TSC usage)"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/lube-level",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Check the lubrication tank level",
+   "action": "Check the way-lube reservoir level on the lube panel and top it up with the oil named on the panel.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "day"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.2 Daily maintenance, p. 375",
+    "page": 395,
+    "quote": "7.2 Daily Maintenance … • Check the lubrication tank level.",
+    "asStated": "Daily"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/chips-ways",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Clean chips from the way covers and bottom pan",
+   "action": "Clear the chips off the way covers and out of the bottom pan.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "day"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.2 Daily maintenance, p. 375",
+    "page": 395,
+    "quote": "7.2 Daily Maintenance … • Clean the chips from the way covers and bottom pan.",
+    "asStated": "Daily"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/chips-tool-changer",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Clean chips from the tool changer",
+   "action": "Clear the chips from the tool changer.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "day"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.2 Daily maintenance, p. 375",
+    "page": 395,
+    "quote": "7.2 Daily Maintenance … • Clean the chips from the tool changer.",
+    "asStated": "Daily"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/spindle-taper",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Wipe and oil the spindle taper",
+   "action": "Wipe the spindle taper with a clean rag and apply a light film of oil.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "day"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.2 Daily maintenance, p. 375",
+    "page": 395,
+    "quote": "7.2 Daily Maintenance … • Wipe the spindle taper with a clean rag and apply light oil.",
+    "asStated": "Daily"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/tsc-filters",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Check the TSC filters",
+   "action": "Check the through-spindle coolant filters; clean or replace them if needed.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "week"
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "through-spindle coolant (TSC)",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.3 Weekly maintenance, p. 375",
+    "page": 395,
+    "quote": "7.3 Weekly Maintenance • Check the Through-Spindle Coolant (TSC) filters. Clean or replace them if needed.",
+    "asStated": "Weekly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/chip-basket",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Clean the coolant tank chip basket",
+   "action": "Empty and clean the chip basket on the coolant tank: weekly on a machine with through-spindle coolant, monthly without.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "week"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.3 Weekly maintenance, p. 375",
+    "page": 395,
+    "quote": "• On machines with the TSC option, clean the chip basket on the coolant tank. Do this monthly for machines without the TSC option.",
+    "asStated": "Weekly on machines with the TSC option; monthly for machines without the TSC option"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/pull-studs",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Grease the tool holder pull studs",
+   "action": "Put a small amount of grease on each tool holder’s pull stud: weekly on a machine with through-spindle coolant, monthly without.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "week"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.3 Weekly maintenance, p. 375",
+    "page": 395,
+    "quote": "• For machines with the TSC option, put a small amount of grease on each tool holder pull stud. Do this monthly for machines without the TSC option.",
+    "asStated": "Weekly for machines with the TSC option; monthly for machines without the TSC option"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/exterior",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Clean the exterior",
+   "action": "Clean all exterior surfaces with a mild cleaner. No solvents.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "week"
+   },
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.3 Weekly maintenance, p. 375",
+    "page": 395,
+    "quote": "• Clean all of the exterior surfaces with mild cleaner. DO NOT use solvents.",
+    "asStated": "Weekly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/way-covers",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Inspect and oil the way covers",
+   "action": "Check that the way covers move freely; wipe them with light oil if needed.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "month"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.4 Monthly maintenance, p. 376",
+    "page": 396,
+    "quote": "7.4 Monthly Maintenance … • Inspect way covers for proper operation and lubricate them with light oil, if necessary.",
+    "asStated": "Monthly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/tool-changer-rails",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Grease the tool changer guide rails",
+   "action": "Put a small amount of grease on the outside edge of the tool changer’s guide rails, then run through all the tools.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "month"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.4 Monthly maintenance, p. 376",
+    "page": 396,
+    "quote": "7.4 Monthly Maintenance … • Place a small amount of grease on the outside edge of the guide rails of the tool changer and run through all tools.",
+    "asStated": "Monthly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/v-flanges",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Grease the tool holder V-flanges",
+   "action": "Put grease on the V-flange of each tool holder.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "month"
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "umbrella (carousel) tool changer",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.4 Monthly maintenance, p. 376",
+    "page": 396,
+    "quote": "7.4 Monthly Maintenance … • For machines with umbrella-style tool changers, put grease on the V-flange of each tool holder.",
+    "asStated": "Monthly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/drive-vents",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Clean the vector drive vents",
+   "action": "Check the vector drive vents in the electrical cabinet (below the power switch) for dust. If there is buildup, open the cabinet, wipe the vents and blow the dust out with compressed air.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "month"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.4 Monthly maintenance, p. 376",
+    "page": 396,
+    "quote": "• Check for dust buildup on electrical cabinet vector drive vents (beneath power switch). If buildup exists, open cabinet and wipe vents with a clean cloth rag. Apply compressed air as necessary to remove dust accumulation.",
+    "asStated": "Monthly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/gearbox-oil-level",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Check the spindle gearbox oil level",
+   "action": "Check the oil level in the spindle gearbox.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "month"
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "spindle gearbox",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.4 Monthly maintenance, p. 376",
+    "page": 396,
+    "quote": "7.4 Monthly Maintenance • Check the oil level in the gear box (if equipped).",
+    "asStated": "Monthly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/smtc-oil",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Check the SMTC oil level",
+   "action": "Check the oil level of the side-mount tool changer.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "month"
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "side-mount tool changer (SMTC)",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.4 Monthly maintenance, p. 376",
+    "page": 396,
+    "quote": "7.4 Monthly Maintenance … • Check the SMTC oil level (if equipped).",
+    "asStated": "Monthly"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/coolant-change",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Replace the coolant and clean the tank",
+   "action": "Drain and replace the coolant and clean the coolant tank thoroughly.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 6,
+    "unit": "month"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.5 Every six months, p. 376",
+    "page": 396,
+    "quote": "7.5 Every (6) Months • Replace coolant and thoroughly clean the coolant tank.",
+    "asStated": "Every (6) Months"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/hoses",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Inspect the hoses and lube lines",
+   "action": "Check all hoses and lubrication lines for cracks.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 6,
+    "unit": "month"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.5 Every six months, p. 376",
+    "page": 396,
+    "quote": "7.5 Every (6) Months … • Check all hoses and lubrication lines for cracking.",
+    "asStated": "Every (6) Months"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/rotary-lube",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Check the rotary A-axis lubrication",
+   "action": "Check the rotary A axis and add lubricant if needed.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 6,
+    "unit": "month"
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "rotary A axis",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.5 Every six months, p. 376",
+    "page": 396,
+    "quote": "7.5 Every (6) Months … • Check the rotary A Axis, if equipped. Add lubrication, if needed.",
+    "asStated": "Every (6) Months"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/lube-filter",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Clean the lube panel reservoir oil filter",
+   "action": "Clean the oil filter inside the lubrication panel’s oil reservoir and clean the residue out of the bottom of the filter.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "year"
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.6 Annual maintenance, p. 376",
+    "page": 396,
+    "quote": "7.6 Annual Maintenance … • Clean the oil filter inside the lubrication panel oil reservoir and clean out the residue at the bottom of the filter.",
+    "asStated": "Annual"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/gearbox-oil",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Replace the spindle gearbox oil",
+   "action": "Drain and refill the spindle gearbox oil.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "year"
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "spindle gearbox",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "7.6 Annual maintenance, p. 376",
+    "page": 396,
+    "quote": "7.6 Annual Maintenance • Replace the gearbox oil (if equipped).",
+    "asStated": "Annual"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/maintenance-due",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "MAINTENANCE DUE icon: the control’s own timers",
+   "action": "The Classic control keeps its own maintenance timers (Current Commands, Maintenance page; Settings 167–186). When the icon shows, do that item and reset its timer on that page.",
+   "kind": "as-needed",
+   "suggest": false,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8200",
+    "locator": "Table T2.21, control icons, p. 58",
+    "page": 78,
+    "quote": "MAINTENANCE DUE | A maintenance procedure is due, based on information in the MAINTENANCE page. Refer to page 49 for more information.",
+    "asStated": "when the MAINTENANCE DUE icon is displayed"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/alarm-124",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Alarm 124 Low Battery: replace the memory battery",
+   "action": "Replace the control’s 3.3 V lithium memory battery within 30 days of the alarm, or programs, parameters, offsets and settings can be lost. The alarm shows only at power-on. Keep backups until it is done.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "124"
+     }
+    ],
+    "within": {
+     "value": 30,
+     "unit": "day"
+    }
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8100",
+    "locator": "Alarms, alarm 124 (printed p. 53)",
+    "page": 54,
+    "quote": "124 | Low Battery | Memory batteries need replacing within 30 days. This alarm is only generated at power on and indicates that the 3.3 volt Lithium battery is below 2.5 volts. If this is not corrected within 30 days, you may lose your stored programs, parameters, offsets, and settings.",
+    "asStated": "Memory batteries need replacing within 30 days (alarm shown at power-on)"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/alarm-121",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Alarm 121 Low Lube or Low Pressure",
+   "action": "Refill the way-lube tank and check that the lube lines are not blocked.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "121"
+     }
+    ],
+    "within": null
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8100",
+    "locator": "Alarms, alarm 121 (printed p. 53)",
+    "page": 54,
+    "quote": "121 | Low Lube or Low Pressure | Way lube is low or empty or the lube pressure is too high or low. Check tank at rear of mill and below control cabinet. … Check that the lube lines are not blocked.",
+    "asStated": "when alarm 121 occurs"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/alarm-120",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Alarm 120 Low Air Pressure",
+   "action": "Check that the shop air gives at least 100 psi and that the machine’s regulator is set to 85 psi.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "120"
+     }
+    ],
+    "within": null
+   },
+   "suggest": true,
+   "scope": "model",
+   "source": {
+    "ref": "haas-96-8100",
+    "locator": "Alarms, alarm 120 (printed p. 52)",
+    "page": 53,
+    "quote": "120 | Low Air Pressure | Air pressure dropped below 80 PSI for a period defined by Parameter 76. The LOW AIR PR alarm will appear on the screen as soon as the pressure gets low, and this alarm appears after some time has elapsed. Check your incoming air pressure for at least 100 PSI and ensure that the regulator is set at 85 PSI.",
+    "asStated": "when alarm 120 occurs (air below 80 PSI for the time set by Parameter 76)"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/alarm-151",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Alarm 151 Low Thru Spindle Coolant",
+   "action": "Check the coolant tank level, the filters and the intake strainer for clogging, and the coolant lines for kinks.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "151"
+     }
+    ],
+    "within": null
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "through-spindle coolant (TSC)",
+   "source": {
+    "ref": "haas-96-8100",
+    "locator": "Alarms, alarm 151 (printed p. 55)",
+    "page": 56,
+    "quote": "151 | Low Thru Spindle Coolant | For machines with Through the Spindle Coolant only. This alarm will shut off the coolant spigot, spindle and pump, and purge the system. Check for low coolant tank level, any filter or intake strainer clogging, or for any kinked or clogged coolant lines.",
+    "asStated": "when alarm 151 occurs"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "haas-vf/alarm-179",
+   "for": [
+    "model:haas-vf-classic"
+   ],
+   "title": "Alarm 179 Low Pressure Transmission Oil",
+   "action": "Check the spindle transmission oil level and its lines.",
+   "kind": "alarm",
+   "alarm": {
+    "match": [
+     {
+      "code": "179"
+     }
+    ],
+    "within": null
+   },
+   "suggest": false,
+   "scope": "model",
+   "ifEquipped": "spindle gearbox",
+   "source": {
+    "ref": "haas-96-8100",
+    "locator": "Alarms, alarm 179 (printed p. 56)",
+    "page": 57,
+    "quote": "179 | Low Pressure Transmission Oil | Spindle coolant oil is low or low pressure condition in lines.",
+    "asStated": "when alarm 179 occurs"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/cabinet-cooler",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Check the control cabinet cooling unit",
+   "action": "Check that the fan in the control cabinet’s cooling unit runs (a strong draft means it does) and that the outside air inlet is not blocked. Clean a blocked inlet with compressed air.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 3,
+    "unit": "month"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-osp-u100m",
+    "locator": "Safety precautions 6 (11), periodic inspection of the control enclosure, p. P-(v)",
+    "page": 6,
+    "quote": "Inspect the following points every three months. - Is the fan motor inside the cooling unit working? The motor is normal if there is a strong draft from the unit. - Is the external air inlet blocked? If it is blocked, clean it with compressed air.",
+    "asStated": "every three months"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/oil-air-level",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Check the oil-air lubrication oil level",
+   "action": "Check the oil in the oil-air lubrication tank every morning before starting, and top it up with clean oil.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "day"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-genos-m560v",
+    "locator": "2-1 Supplying oil to the oil-air lubrication unit, p. P-44",
+    "url": "https://www.manualslib.com/manual/3439586/Okuma-Genos-M560-V.html?page=21",
+    "quote": "Check the oil amount every morning when starting operation.",
+    "asStated": "every morning when starting operation"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/oil-air-filter-clean",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Clean the oil-air lubrication pump filter",
+   "action": "Clean the pump filter inside the oil-air lubrication tank.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 6,
+    "unit": "month"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-genos-m560v",
+    "locator": "2-1 Supplying oil to the oil-air lubrication unit, p. P-44",
+    "url": "https://www.manualslib.com/manual/3439586/Okuma-Genos-M560-V.html?page=21",
+    "quote": "Clean the pump filter in the tank every 6 months and change every year.",
+    "asStated": "every 6 months"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/oil-air-filter-replace",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Replace the oil-air lubrication pump filter",
+   "action": "Replace the pump filter inside the oil-air lubrication tank.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 1,
+    "unit": "year"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-genos-m560v",
+    "locator": "2-1 Supplying oil to the oil-air lubrication unit, p. P-44",
+    "url": "https://www.manualslib.com/manual/3439586/Okuma-Genos-M560-V.html?page=21",
+    "quote": "Clean the pump filter in the tank every 6 months and change every year.",
+    "asStated": "change every year"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/spindle-cooler-oil",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Change the spindle head cooling unit oil",
+   "action": "Change the oil of the spindle head cooling unit every 2,000 hours of operation: about every 10 months at 200 h a month, or every 4 months at 500 h a month.",
+   "kind": "interval",
+   "basis": "operating",
+   "every": {
+    "value": 2000,
+    "unit": "hour"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-genos-m560v",
+    "locator": "2-2 Spindlehead cooling unit, p. P-45",
+    "url": "https://www.manualslib.com/manual/3439586/Okuma-Genos-M560-V.html?page=22",
+    "quote": "Every 2000 hours of operation: | 10 months when operated at 200 hours/month | 4 months when operated at 500 hours/month",
+    "asStated": "Every 2000 hours of operation: 10 months when operated at 200 hours/month; 4 months when operated at 500 hours/month"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/cooler-air-filter",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Clean the cooling unit’s air filter",
+   "action": "Clean the cooling unit’s air filter. A dirty filter cuts the cooling sharply and trips the compressor’s protection.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 2,
+    "unit": "week"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-vtm200",
+    "locator": "4-2 Cleaning the air filter, p. P-58",
+    "url": "https://www.manualslib.com/manual/3329626/Okuma-Vtm-200.html?page=80",
+    "quote": "Clean the filter once in two weeks. Negligence of periodical cleaning of the air filter will decrease the cooling effect considerably and activate the air compressor protective function.",
+    "asStated": "once in two weeks"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/way-wipers",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Clean the way covers and wipers",
+   "action": "Clean the sliding covers and wipers and check that the wipers move smoothly. Replace a wiper whose sealing edge is cracked or worn.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 6,
+    "unit": "month"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-vtm200",
+    "locator": "7-1 Sliding cover and wiper, p. P-61",
+    "url": "https://www.manualslib.com/manual/3329626/Okuma-Vtm-200.html?page=83",
+    "quote": "Clean them every six months. ... Replace the wiper with new one if any damage such as a crack or abrasion can be observed in the sealing surface.",
+    "asStated": "every six months"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  },
+  {
+   "id": "okuma/door-window",
+   "for": [
+    "model:okuma-mb-h"
+   ],
+   "title": "Replace the door safety window",
+   "action": "Replace the door’s safety window every two years: coolant slowly weakens it, until it may no longer stop flying chips or parts.",
+   "kind": "interval",
+   "basis": "calendar",
+   "every": {
+    "value": 2,
+    "unit": "year"
+   },
+   "suggest": false,
+   "scope": "related",
+   "source": {
+    "ref": "okuma-vtm200",
+    "locator": "11-1 Replacement interval, p. P-68",
+    "url": "https://www.manualslib.com/manual/3329626/Okuma-Vtm-200.html?page=90",
+    "quote": "The safety window glass must be replaced every two years. Safety window glass performance gradually deteriorates due to coolant corrosion.",
+    "asStated": "every two years"
+   },
+   "checked": {
+    "result": "confirmed",
+    "on": "2026-11-19"
+   }
+  }
+ ]
+}
