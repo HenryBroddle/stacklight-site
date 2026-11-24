@@ -10,7 +10,7 @@ import { summarizeRuns } from '/shared/runs.js';
 import { errorClassText } from '/shared/contracts.js';
 import { compareTaskRows } from '/shared/maintenance.js';
 import { iconSvg } from './icons.js';
-import { convertFeed, formatSinceClock, formatTimeOfDay, glance, kindLabel, paletteFor } from './statusStyle.js';
+import { convertFeed, formatSinceClock, formatTimeOfDay, glance, kindLabel, paletteFor, MESSAGE_ADDRESS_RE, messageLabels, messageLabel } from './statusStyle.js';
 import { hoursText, hudCountNote, openDoneDialog, progressText, taskSummary } from './maintenancePanel.js';
 
 const HOUR = 3_600_000;
@@ -69,6 +69,8 @@ export function createDetail(el, deps) {
   let historyLoading = false;
   let lastSig = '';
   let serviceFormOpen = false;
+  /** A warning-mark switch save is in flight (D19). */
+  let warnSaving = false;
   /** @type {HTMLFormElement|null} */
   let serviceForm = null;
   /** Today's runs of the open machine: { runs, enabled } | { error } | null (loading) */
@@ -290,7 +292,7 @@ export function createDetail(el, deps) {
     const { vm, snapshot: snap, layoutMachine: lm } = m;
     const display = ctx.settings?.display ?? {};
     const clockOpts = { clock24h: !!display.clock24h, timeZone: typeof display.timeZone === 'string' ? display.timeZone : undefined };
-    const sig = JSON.stringify([vm.status, vm.variant, vm.timer, vm.down, vm.attention, snap?.values, snap?.conditions, snap?.service, snap?.connection, snap?.connectionError, snap?.connectionErrorClass, snap?.device, lm, historyAt, runsAt, maintAt, maintOn(), ctx.theme, serviceFormOpen, ctx.settings?.programs, Math.floor(ctx.now / 30_000)]);
+    const sig = JSON.stringify([vm.status, vm.variant, vm.timer, vm.down, vm.attention, snap?.values, snap?.conditions, snap?.service, snap?.connection, snap?.connectionError, snap?.connectionErrorClass, snap?.device, lm, historyAt, runsAt, maintAt, maintOn(), ctx.theme, serviceFormOpen, ctx.settings?.programs, vm.badge, vm.warningsHidden, vm.overridesHidden, warnSaving, messageLabels(ctx.settings, vm.id), Math.floor(ctx.now / 30_000)]);
     if (sig === lastSig) return;
     lastSig = sig;
 
@@ -300,6 +302,11 @@ export function createDetail(el, deps) {
     head.style.setProperty('--ink', pal.ink);
     head.className = `drawer-head st-${vm.status} v-${vm.variant}`;
     statusBadge.replaceChildren(iconSvg(vm.icon, { size: null }), h('span', null, vm.word));
+    if (vm.badge === 'warning') {
+      const mark = h('span', 'warn-mark', '!');
+      mark.title = 'Warning on the machine';
+      statusBadge.append(mark);
+    }
     nameEl.textContent = vm.name;
     subEl.textContent = [kindLabel(vm.kind), lm?.source ? describeSource(lm.source) : 'Not linked'].join(' · ');
 
@@ -339,14 +346,35 @@ export function createDetail(el, deps) {
         const tr = h('tr', `cond-${String(c.level).toLowerCase()}`);
         const lvl = h('td');
         lvl.append(h('span', `lvl lvl-${String(c.level).toLowerCase()}`, c.level === 'FAULT' ? 'FAULT' : c.level === 'WARNING' ? 'WARNING' : val(c.level)));
-        tr.append(lvl, h('td', 'code', val(c.nativeCode)), h('td', 'msg', c.message || (c.type ? titleCase(c.type) : '—')),
+        // a FANUC message (an A-area code): the name the shop gave it, and a way to name it (D19 amendment)
+        const isMessage = c.level === 'WARNING' && MESSAGE_ADDRESS_RE.test(String(c.nativeCode ?? ''));
+        const named = isMessage ? messageLabel(ctx.settings, vm.id, c.nativeCode) : null;
+        const msg = h('td', 'msg', named ?? (c.message || (c.type ? titleCase(c.type) : '—')));
+        if (isMessage && canName(ctx)) {
+          const b = h('button', 'btn btn-quiet btn-small msg-name-btn', named ? 'Rename' : 'Name it');
+          b.type = 'button';
+          b.title = named ? `Change the name for ${c.nativeCode}` : `Give ${c.nativeCode} a name: what the control's screen says`;
+          b.addEventListener('click', () => editMessageName(vm, ctx, c.nativeCode));
+          msg.append(' ', b);
+        }
+        tr.append(lvl, h('td', 'code', val(c.nativeCode)), msg,
           h('td', null, val(c.componentName)), h('td', 'since', finite(c.since) ? glance(ctx.now - c.since) : '—'));
         tbody.append(tr);
       }
       table.append(thead, tbody);
-      parts.push(section('Active alarms & warnings', table));
+      const sec = section('Active alarms & warnings', table);
+      const sw = warningSwitch(vm, ctx);
+      if (sw) sec.append(sw);
+      const names = messageNames(vm, ctx, lm);
+      if (names) sec.append(names);
+      parts.push(sec);
     } else if (vm.variant === 'status') {
-      parts.push(section('Active alarms & warnings', h('p', 'muted', 'None')));
+      const sec = section('Active alarms & warnings', h('p', 'muted', 'None'));
+      const sw = warningSwitch(vm, ctx);
+      if (sw) sec.append(sw);
+      const names = messageNames(vm, ctx, lm);
+      if (names) sec.append(names);
+      parts.push(sec);
     }
 
     // --- maintenance (D18)
@@ -359,12 +387,13 @@ export function createDetail(el, deps) {
       const feed = convertFeed(v.feedrate, v.feedrateUnits, display.feedUnits === 'mm/min' ? 'mm/min' : 'in/min');
       const pct = (x) => (finite(x) ? `${formatNumber(x)}%` : '—');
       const progText = [v.program, v.programComment].filter((x) => x !== null && x !== undefined && x !== '').join(' — ');
-      // PROGRAM (MAIN) first; the ACTIVE (sub)program as a second line only when it differs (profile §7.8).
+      // PROGRAM (MAIN) first; the ACTIVE (sub)program as a second line only when it differs (profile §7.8): the
+      // subprogram or macro the main called, executing now (D21)
       const activeDiffers = typeof v.activeProgram === 'string' && v.activeProgram !== '' && v.activeProgram !== v.program;
       let prog = progText;
       if (activeDiffers) {
         prog = document.createDocumentFragment();
-        prog.append(h('div', null, progText || '—'), h('div', 'muted', `Active: ${v.activeProgram}`));
+        prog.append(h('div', null, progText || '—'), h('div', 'muted', `Now in: ${v.activeProgram}`));
       }
       parts.push(section('Machine', dl([
         ['Mode', titleCase(v.controllerMode)],
@@ -383,7 +412,7 @@ export function createDetail(el, deps) {
         ...(hoursText(v) ? [['Hours', hoursText(v)]] : []),
         ...(v.functionalMode ? [['Functional mode', titleCase(v.functionalMode)]] : []),
         ...(v.message ? [['Message', v.message]] : []),
-      ])));
+      ]), ...[overrideSwitch(vm, ctx, v)].filter(Boolean)));
     }
 
     // --- program transfer (D16)
@@ -422,6 +451,192 @@ export function createDetail(el, deps) {
       active.focus({ preventScroll: true });
       if (sel) { try { active.setSelectionRange(sel[0], sel[1]); } catch { /* not a text input */ } }
     }
+  }
+
+  /**
+   * This machine's overrides on the board and plan (D25: the board row's label, the tile's chart): on by default; off
+   * for a machine that always runs with an override set (a rapid kept at 25 %), where they would say nothing new.
+   * Only for machines that report overrides.
+   */
+  function overrideSwitch(vm, ctx, v) {
+    if (ctx.kiosk || deps.readOnly?.() || !vm.id) return null;
+    const reports = ['feedOverride', 'rapidOverride', 'spindleOverride'].some((k) => finite(v?.[k]));
+    if (!reports && !vm.overridesHidden) return null;
+    const on = !vm.overridesHidden;
+    const row = h('div', 'prog-setting warn-setting');
+    const text = h('div', 'prog-setting-text');
+    text.append(h('div', 'prog-setting-title', 'Overrides on the board and plan'),
+      h('div', 'muted small', on
+        ? 'On: while this machine runs with its feed, rapid or spindle override away from 100 %, its board row says so and its tile shows the bars.'
+        : 'Off: this machine\u2019s overrides show only here.'));
+    const b = h('button', `prog-switch${on ? ' on' : ''}`);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', `Overrides on the board and plan for ${vm.name}`);
+    b.append(h('span', 'prog-knob'));
+    b.disabled = warnSaving;
+    const id = vm.id;
+    b.addEventListener('click', async () => {
+      warnSaving = true;
+      b.disabled = true;
+      try {
+        await api.settings.save({ overrides: { machines: { [id]: { show: !on } } } });
+        toast?.(on ? 'Overrides off the board and plan for this machine' : 'Overrides on the board and plan for this machine', { kind: 'ok' });
+      } catch (e) {
+        const why = e?.errors?.[0]?.message ?? e?.body?.errors?.[0]?.message;
+        toast?.(`Not saved: ${e?.message ?? 'error'}${why ? ` (${why})` : ''}`, { kind: 'error', timeoutMs: why ? 9000 : undefined });
+      } finally {
+        warnSaving = false;
+        lastSig = '';
+        render();
+      }
+    });
+    row.append(text, b);
+    return row;
+  }
+
+  /**
+   * Per machine (D19): whether an active warning puts the yellow mark on this machine's tile and board row. For the
+   * machines that always have a notice up that nobody needs to act on. Faults and alarms are never hidden.
+   */
+  function warningSwitch(vm, ctx) {
+    if (ctx.kiosk || deps.readOnly?.() || !vm.id) return null;
+    const on = !vm.warningsHidden;
+    const row = h('div', 'prog-setting warn-setting');
+    const text = h('div', 'prog-setting-text');
+    text.append(h('div', 'prog-setting-title', 'Warning mark on the board'),
+      h('div', 'muted small', on
+        ? 'On: a warning on this machine puts a yellow ! on its tile and board row.'
+        : 'Off: this machine\u2019s warnings stay in this list but put no mark on the board. Alarms always show.'));
+    const b = h('button', `prog-switch${on ? ' on' : ''}`);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', `Warning mark on the board for ${vm.name}`);
+    b.append(h('span', 'prog-knob'));
+    b.disabled = warnSaving;
+    const id = vm.id;
+    b.addEventListener('click', async () => {
+      warnSaving = true;
+      b.disabled = true;
+      try {
+        // only the switch: the machine's message names stay as they are
+        await api.settings.save({ warnings: { machines: { [id]: { show: !on } } } });
+        toast?.(on ? 'Warning mark off for this machine' : 'Warning mark on for this machine', { kind: 'ok' });
+      } catch (e) {
+        // the server's own reason, e.g. a HUD still running older code that does not know this setting yet
+        const why = e?.errors?.[0]?.message ?? e?.body?.errors?.[0]?.message;
+        toast?.(`Not saved: ${e?.message ?? 'error'}${why ? ` (${why})` : ''}`, { kind: 'error', timeoutMs: why ? 9000 : undefined });
+      } finally {
+        warnSaving = false;
+        lastSig = '';
+        render();
+      }
+    });
+    row.append(text, b);
+    return row;
+  }
+
+  /** Message names are edited where the warning switch is: on a PC, not a TV or a preview. */
+  const canName = (ctx) => !ctx.kiosk && !deps.readOnly?.();
+
+  /**
+   * Names for this machine's FANUC messages (D19 amendment). A FANUC shows a message's text on its own screen only;
+   * the HUD sees its address (A14.2). Most last under a minute, so names can be added for any address here, not only
+   * while the message is up. FANUC machines, or any machine that already has names.
+   */
+  function messageNames(vm, ctx, lm) {
+    if (!canName(ctx) || !vm.id) return null;
+    const labels = messageLabels(ctx.settings, vm.id);
+    const keys = Object.keys(labels).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+    if (lm?.source?.protocol !== 'focas' && !keys.length) return null;
+    const box = h('div', 'msg-names');
+    box.append(h('div', 'prog-setting-title', 'Message names'),
+      h('p', 'muted small', 'FANUC messages show as a code like A14.2. Write down what the control\u2019s screen says for each one, and every screen shows that instead.'));
+    if (keys.length) {
+      const list = h('div', 'msg-names-list');
+      for (const k of keys) {
+        const row = h('div', 'msg-names-row');
+        const edit = h('button', 'btn btn-quiet btn-small', 'Edit');
+        edit.type = 'button';
+        edit.addEventListener('click', () => editMessageName(vm, ctx, k));
+        const del = h('button', 'btn btn-quiet btn-small', 'Remove');
+        del.type = 'button';
+        del.addEventListener('click', () => saveMessageNames(vm, ctx, (l) => { delete l[k]; }, `Removed the name for ${k}`));
+        row.append(h('span', 'code', k), h('span', 'msg-names-text', labels[k]), edit, del);
+        list.append(row);
+      }
+      box.append(list);
+    }
+    const add = h('button', 'btn btn-quiet btn-small', keys.length ? 'Add another name' : 'Add a name');
+    add.type = 'button';
+    add.addEventListener('click', () => editMessageName(vm, ctx, null));
+    box.append(add);
+    return box;
+  }
+
+  /** Change this machine's names (a function edits a copy) and save them; every screen follows. */
+  async function saveMessageNames(vm, ctx, change, okText) {
+    const next = { ...messageLabels(ctx.settings, vm.id) };
+    change(next);
+    try {
+      await api.settings.save({ warnings: { machines: { [vm.id]: { labels: next } } } });
+      if (okText) toast?.(okText, { kind: 'ok' });
+    } catch (e) {
+      const why = e?.errors?.[0]?.message ?? e?.body?.errors?.[0]?.message;
+      toast?.(`Not saved: ${e?.message ?? 'error'}${why ? ` (${why})` : ''}`, { kind: 'error', timeoutMs: 9000 });
+    }
+  }
+
+  /** Ask for a message's address and name (address fixed when given). */
+  function editMessageName(vm, ctx, address) {
+    const labels = messageLabels(ctx.settings, vm.id);
+    const dlg = document.createElement('dialog');
+    dlg.className = 'token-dialog prog-dialog';
+    const form = h('form', 'token-form');
+    form.append(h('h2', null, address ? `Name ${address} on ${vm.name}` : `Name a message on ${vm.name}`));
+    const addr = h('input');
+    addr.value = address ?? '';
+    addr.placeholder = 'A14.2';
+    addr.maxLength = 7;
+    addr.autocomplete = 'off';
+    addr.spellcheck = false;
+    addr.readOnly = !!address;
+    const name = h('input');
+    name.value = address ? labels[address] ?? '' : '';
+    name.placeholder = 'What the control\u2019s screen says, e.g. TOOL LIFE EXPIRED';
+    name.maxLength = 60;
+    name.autocomplete = 'off';
+    const la = h('label', 'prog-field');
+    la.append(h('span', null, 'Code (as the HUD shows it)'), addr);
+    const ln = h('label', 'prog-field');
+    ln.append(h('span', null, 'Name'), name);
+    const hint = h('p', 'muted small', 'Up to 60 characters. Leave the name empty to remove it.');
+    const row = h('div', 'dialog-actions');
+    const cancel = h('button', 'btn', 'Cancel');
+    cancel.type = 'button';
+    const save = h('button', 'btn btn-primary', 'Save');
+    save.type = 'submit';
+    row.append(cancel, save);
+    form.append(la, ln, hint, row);
+    dlg.append(form);
+    const valid = () => MESSAGE_ADDRESS_RE.test(addr.value.trim().toUpperCase());
+    const check = () => { save.disabled = !valid(); hint.classList.toggle('prog-warn', !!addr.value.trim() && !valid()); };
+    addr.addEventListener('input', check);
+    check();
+    const finish = () => { try { dlg.close(); } catch { /* closed */ } dlg.remove(); };
+    cancel.addEventListener('click', finish);
+    dlg.addEventListener('cancel', finish);
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (!valid()) return;
+      const k = addr.value.trim().toUpperCase();
+      const v = name.value.replace(/\s+/g, ' ').trim();
+      finish();
+      await saveMessageNames(vm, ctx, (l) => { if (v) l[k] = v; else delete l[k]; }, v ? `${k} on ${vm.name} is now \u201c${v}\u201d` : `Removed the name for ${k}`);
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+    (address ? name : addr).focus();
   }
 
   function serviceSection(snap, lm, ctx, clockOpts) {

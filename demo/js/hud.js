@@ -24,9 +24,14 @@ function button(icon, label, cls) {
 
 /**
  * @param {HTMLElement} el
- * @param {{ onDiscovery?: Function, onRuns?: Function, onMaintenance?: Function, onEdit?: Function, onTheme?: Function, onSound?: Function,
- *           onLayoutPick?: Function, onTextSize?: (step: -1|0|1) => number }} [actions]  onTextSize: smaller (-1), reset (0) or larger (1); returns the new size
+ * @param {{ onDiscovery?: Function, onRuns?: Function, onMaintenance?: Function, onEdit?: Function, onTheme?: (theme: 'dark'|'light') => void, onSound?: Function,
+ *           onLayoutPick?: Function, onTextSize?: (step: -1|0|1) => number,
+ *           onScreenLayout?: (choice: 'landscape'|'portrait') => void }} [actions]  onTextSize: smaller (-1), reset (0) or larger
+ *           (1); returns the new size. onScreenLayout: this screen's Layout choice (D4 amendment 2026-11-20)
  */
+/** The logo when the settings name none (the public demo sets its own). */
+const DEFAULT_LOGO = '/brand/stacklight-mark-light.svg';
+
 export function createTopBar(el, actions = {}) {
   el.replaceChildren();
   el.classList.add('topbar');
@@ -61,17 +66,19 @@ export function createTopBar(el, actions = {}) {
   nav.setAttribute('aria-label', 'HUD actions');
   const btnSound = button('volume-off', 'Sound off', 'btn-sound');
   btnSound.hidden = true;
-  // Drawer text size (shop feedback, 2026-11-19: "Need font control. Hard to read and cramped."): the drawers and the
-  // dialogs they open, never the board, the plan or this bar; kept per browser by app.js
-  const btnText = button('text-size', 'Text', 'btn-text');
-  btnText.title = 'Text size in the drawers on this screen';
+  // Display menu, kept per browser by app.js: the drawers' text size (shop feedback 2026-11-19, "Need font control.
+  // Hard to read and cramped."; never the board, the plan or this bar), the screen's Layout, Landscape or Portrait
+  // (2026-11-20: on a monitor on its side the drawers open over the machine rows, below the plan), and the Theme,
+  // Dark or Light (moved here from its own top bar button, 2026-11-20)
+  const btnText = button('text-size', 'Display', 'btn-text');
+  btnText.title = 'Text size, layout and theme on this screen';
   btnText.setAttribute('aria-haspopup', 'true');
   btnText.setAttribute('aria-expanded', 'false');
   btnText.hidden = !actions.onTextSize;
   const textMenu = h('div', 'text-menu');
   textMenu.hidden = true;
   textMenu.setAttribute('role', 'group');
-  textMenu.setAttribute('aria-label', 'Drawer text size');
+  textMenu.setAttribute('aria-label', 'Display on this screen');
   const textDown = h('button', 'btn btn-quiet text-step', 'A−');
   textDown.type = 'button';
   textDown.setAttribute('aria-label', 'Smaller text');
@@ -81,8 +88,47 @@ export function createTopBar(el, actions = {}) {
   textUp.setAttribute('aria-label', 'Larger text');
   const textReset = h('button', 'btn btn-quiet btn-small', 'Reset');
   textReset.type = 'button';
-  textMenu.append(textDown, textValue, textUp, textReset);
-  const btnTheme = button('sun', 'Light', 'btn-theme');
+  const textRow = h('div', 'text-menu-row');
+  textRow.append(h('span', 'text-menu-label', 'Text'), textDown, textValue, textUp, textReset);
+  const layoutRow = h('div', 'text-menu-row layout-row');
+  layoutRow.setAttribute('role', 'radiogroup');
+  layoutRow.setAttribute('aria-label', 'Layout');
+  const layoutBtns = {};
+  layoutRow.append(h('span', 'text-menu-label', 'Layout'));
+  for (const [value, label, tip] of [
+    ['landscape', 'Landscape', 'The plan with the machine list beside it; details open from the side'],
+    ['portrait', 'Portrait', 'For a monitor on its side: the plan on top, the machine list below; details open over the list'],
+  ]) {
+    const b = h('button', 'btn btn-quiet layout-choice', label);
+    b.type = 'button';
+    b.title = tip;
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', 'false');
+    b.dataset.layout = value;
+    b.addEventListener('click', () => actions.onScreenLayout?.(value));
+    layoutBtns[value] = b;
+    layoutRow.append(b);
+  }
+  layoutRow.hidden = !actions.onScreenLayout;
+  const themeRow = h('div', 'text-menu-row theme-row');
+  themeRow.setAttribute('role', 'radiogroup');
+  themeRow.setAttribute('aria-label', 'Theme');
+  const themeBtns = {};
+  themeRow.append(h('span', 'text-menu-label', 'Theme'));
+  for (const [value, label, icon] of [['dark', 'Dark', 'moon'], ['light', 'Light', 'sun']]) {
+    const b = h('button', 'btn btn-quiet theme-choice');
+    b.type = 'button';
+    b.append(iconSvg(icon, { size: null }), h('span', null, label));
+    b.title = `${label} theme on this screen`;
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', 'false');
+    b.dataset.theme = value;
+    b.addEventListener('click', () => actions.onTheme?.(value));
+    themeBtns[value] = b;
+    themeRow.append(b);
+  }
+  themeRow.hidden = !actions.onTheme;
+  textMenu.append(textRow, layoutRow, themeRow);
   const btnRuns = button('report', 'Runs', 'btn-runs');
   btnRuns.title = 'Run report: program runs, cycle times and part counts';
   btnRuns.hidden = !actions.onRuns;
@@ -97,7 +143,7 @@ export function createTopBar(el, actions = {}) {
   btnMaintenance.title = maintTitle(0);
   const btnDiscovery = button('search', 'Discovery', 'btn-discovery');
   const btnEdit = button('pencil', 'Edit layout', 'btn-edit');
-  nav.append(btnSound, btnText, btnTheme, btnRuns, btnMaintenance, btnDiscovery, btnEdit);
+  nav.append(btnSound, btnText, btnRuns, btnMaintenance, btnDiscovery, btnEdit);
   right.append(live, clock, nav);
   el.append(brand, center, right);
   document.body.append(textMenu);
@@ -136,7 +182,6 @@ export function createTopBar(el, actions = {}) {
   btnMaintenance.addEventListener('click', () => actions.onMaintenance?.());
   btnDiscovery.addEventListener('click', () => actions.onDiscovery?.());
   btnEdit.addEventListener('click', () => actions.onEdit?.());
-  btnTheme.addEventListener('click', () => actions.onTheme?.());
   btnSound.addEventListener('click', () => actions.onSound?.());
 
   let lastClock = '';
@@ -146,8 +191,9 @@ export function createTopBar(el, actions = {}) {
       const b = settings.branding && typeof settings.branding === 'object' ? settings.branding : {};
       shopName.textContent = typeof settings.shopName === 'string' && settings.shopName.trim() ? settings.shopName : 'Machine Shop';
       subtitle.textContent = typeof b.subtitle === 'string' ? b.subtitle : 'Shop Floor';
-      const src = typeof b.logo === 'string' && SAFE_PATH.test(b.logo) ? b.logo : '/brand/stacklight-mark-light.svg';
-      if (logo.getAttribute('src') !== src) { logo.hidden = false; logo.src = src; }
+      // the shop's logo (settings branding.logo, a file in <dataDir>/brand served at /brand/); none → no logo
+      const src = typeof b.logo === 'string' && SAFE_PATH.test(b.logo) ? b.logo : DEFAULT_LOGO;
+      if (!src) { logo.hidden = true; logo.removeAttribute('src'); } else if (logo.getAttribute('src') !== src) { logo.hidden = false; logo.src = src; }
       if (typeof b.accent === 'string' && HEX.test(b.accent)) document.documentElement.style.setProperty('--accent-brand', b.accent);
       else document.documentElement.style.removeProperty('--accent-brand');
       const icon = typeof b.icon === 'string' && SAFE_PATH.test(b.icon) ? b.icon : null;
@@ -181,10 +227,13 @@ export function createTopBar(el, actions = {}) {
       liveText.textContent = state === 'live' ? 'LIVE' : state === 'stale' ? 'STALE' : 'CONNECTING';
       live.title = title;
     },
+    /** The theme in use ('dark' | 'light'): the Display menu's Theme row shows it. */
     setTheme(theme) {
-      const dark = theme !== 'light';
-      btnTheme.replaceChildren(iconSvg(dark ? 'sun' : 'moon', { size: null }), h('span', 'btn-label', dark ? 'Light' : 'Dark'));
-      btnTheme.title = dark ? 'Switch to the light theme' : 'Switch to the dark theme';
+      const v = theme === 'light' ? 'light' : 'dark';
+      for (const [k, b] of Object.entries(themeBtns)) {
+        b.setAttribute('aria-checked', String(k === v));
+        b.classList.toggle('on', k === v);
+      }
     },
     /** state: null (hidden) | 'on' | 'off' | 'blocked' */
     setSound(state) {
@@ -203,6 +252,14 @@ export function createTopBar(el, actions = {}) {
     },
     /** Show the text size (a multiplier, 1 = 100 %). */
     setTextSize(v) { if (typeof v === 'number') showTextSize(v); },
+    /** The screen layout in use ('landscape' | 'portrait'), or null where it does not apply (a phone, a TV). */
+    setScreenLayout(v) {
+      layoutRow.hidden = !actions.onScreenLayout || (v !== 'landscape' && v !== 'portrait');
+      for (const [k, b] of Object.entries(layoutBtns)) {
+        b.setAttribute('aria-checked', String(k === v));
+        b.classList.toggle('on', k === v);
+      }
+    },
     /** Hide the Runs button when the server has the run report turned off. */
     setRunsAvailable(available) {
       btnRuns.hidden = !available || !actions.onRuns;

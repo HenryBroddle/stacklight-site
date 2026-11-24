@@ -286,28 +286,46 @@ async function fetchRaw(path, { method = 'GET', body, headers = {}, timeoutMs = 
 export const programs = {
   /** Setup: { enabled, maxUploadMB, machines: [{ id, name, enabled, host, linkedHost, port, folder, loginSaved }] } */
   overview: () => fetchJson('/api/programs', { auth: true, askToken: true }),
-  /** { machine, status: { known, running, program }, files: [{ name, size, modified, comment, firstLine, inUse }], firstLinesPending, maxUploadMB } */
-  list: (id) => fetchJson(`/api/machines/${enc(id)}/programs`, { auth: true, askToken: true, timeoutMs: 60000 }),
+  /**
+   * One folder of a machine's Data Server (dir: folder names below the machine's folder; [] = its own folder):
+   * { machine, dir, folders: [{ name, modified }], status, files: [{ name, size, modified, comment, firstLine, inUse }], firstLinesPending, maxUploadMB }
+   */
+  list: (id, dir = []) => fetchJson(`/api/machines/${enc(id)}/programs${dirQuery(dir)}`, { auth: true, askToken: true, timeoutMs: 60000 }),
   history: (id) => fetchJson(`/api/machines/${enc(id)}/programs-history`, { auth: true, askToken: true }),
-  /** Read the next first lines: { lines: { name: line }, pending } */
-  firstLines: (id) => fetchJson(`/api/machines/${enc(id)}/programs-first-lines`, { auth: true, timeoutMs: 60000 }),
-  /** Send one program (Blob/ArrayBuffer). 409 EXISTS → ask, then again with replace. */
-  async upload(id, name, data, { replace = false } = {}) {
-    const res = await fetchRaw(`/api/machines/${enc(id)}/programs/${enc(name)}${replace ? '?replace=1' : ''}`, {
+  /** Read the next first lines in a folder: { lines: { name: line }, pending } */
+  firstLines: (id, dir = []) => fetchJson(`/api/machines/${enc(id)}/programs-first-lines${dirQuery(dir)}`, { auth: true, timeoutMs: 60000 }),
+  /** Send one program (Blob/ArrayBuffer) into a folder. 409 EXISTS → ask, then again with replace. */
+  async upload(id, name, data, { replace = false, dir = [] } = {}) {
+    const q = new URLSearchParams();
+    if (replace) q.set('replace', '1');
+    if (dir.length) q.set('dir', dir.join('/'));
+    const s = q.toString(); // not q.size: older browsers (Chrome before 113, Safari before 17) do not have it
+    const res = await fetchRaw(`/api/machines/${enc(id)}/programs/${enc(name)}${s ? `?${s}` : ''}`, {
       method: 'PUT', body: data, headers: { 'Content-Type': 'application/octet-stream', Accept: 'application/json' },
     });
     return res.json();
   },
   /** Download one program → Blob. */
-  async download(id, name) {
-    return (await fetchRaw(`/api/machines/${enc(id)}/programs/${enc(name)}`)).blob();
+  async download(id, name, { dir = [] } = {}) {
+    return (await fetchRaw(`/api/machines/${enc(id)}/programs/${enc(name)}${dirQuery(dir)}`)).blob();
   },
-  remove: (id, name) => fetchJson(`/api/machines/${enc(id)}/programs/${enc(name)}`, { method: 'DELETE', timeoutMs: 300000 }),
+  remove: (id, name, { dir = [] } = {}) => fetchJson(`/api/machines/${enc(id)}/programs/${enc(name)}${dirQuery(dir)}`, { method: 'DELETE', timeoutMs: 300000 }),
+  /** Copy (or move: true) a program from `dir` into `toDir` on the same machine; 409 EXISTS → ask, then replace. */
+  copy: (id, name, { dir = [], toDir = [], move = false, replace = false } = {}) => fetchJson(`/api/machines/${enc(id)}/programs/${enc(name)}/copy${dirQuery(dir)}`, {
+    method: 'POST', body: { toDir: toDir.join('/'), move, replace }, timeoutMs: 300000,
+  }),
+  /** Make a folder in `dir`; delete an empty one. */
+  makeFolder: (id, name, { dir = [] } = {}) => fetchJson(`/api/machines/${enc(id)}/program-folders${dirQuery(dir)}`, { method: 'POST', body: { name }, timeoutMs: 60000 }),
+  removeFolder: (id, name, { dir = [] } = {}) => fetchJson(`/api/machines/${enc(id)}/program-folders/${enc(name)}${dirQuery(dir)}`, { method: 'DELETE', timeoutMs: 60000 }),
   putBack: (id, entryId) => fetchJson(`/api/machines/${enc(id)}/programs-history/${enc(entryId)}/put-back`, { method: 'POST', timeoutMs: 300000 }),
   saveLogin: (id, username, password) => fetchJson(`/api/programs/machines/${enc(id)}/login`, { method: 'PUT', body: { username, password } }),
   forgetLogin: (id) => fetchJson(`/api/programs/machines/${enc(id)}/login`, { method: 'DELETE' }),
   test: (id) => fetchJson(`/api/programs/machines/${enc(id)}/test`, { method: 'POST', timeoutMs: 60000 }),
 };
+/** ?dir=A/B for a folder path ('' for the machine's own folder). */
+function dirQuery(dir) {
+  return Array.isArray(dir) && dir.length ? `?dir=${encodeURIComponent(dir.join('/'))}` : '';
+}
 
 // ---------------------------------------------------------------------------------------------
 // Maintenance (DECISIONS D18): reads are open; writes need the edit token (or the HUD PC's own browser)

@@ -13,12 +13,14 @@ import { createDetail } from './detail.js';
 import { createDiscoveryPanel } from './discoveryPanel.js';
 import { createRunsPanel } from './runsPanel.js';
 import { createProgramsPanel } from './programsPanel.js';
+import { createFileDrop } from './fileDrop.js';
 import { createMaintenancePanel } from './maintenancePanel.js';
 import { createWatchdog } from './watchdog.js';
 import { createErrorReporter } from './errorReport.js';
 import { readUrlOptions, resolveScreen, computeTypeScale, applyProfile, effectiveMotion, createChime } from './screen.js';
 import { machineView, machineFacts, createDisplayDebounce, formatTimeOfDay } from './statusStyle.js';
 import { summarizeRuns } from '/shared/runs.js';
+import { startOverrideTicker } from './overrideLabel.js';
 import { formatDuration } from '/shared/format.js';
 import { endpointKey } from '/shared/sources.js';
 
@@ -26,6 +28,12 @@ const THEME_KEY = 'machine-shop-hud.theme';
 const TEXT_KEY = 'machine-shop-hud.text-size';
 /** Text sizes offered on the top bar (multipliers of the screen's type scale), kept per browser. */
 const TEXT_SIZES = Object.freeze([0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2]);
+/** This browser's screen Layout (top bar Display menu): 'landscape' | 'portrait'; unset follows the screen's shape. */
+const LAYOUT_KEY = 'machine-shop-hud.screen-layout';
+/** In Portrait the plan takes at most this share of the height; less while a drawer is open over the rows. */
+const PORTRAIT_PLAN_SHARE = 0.55;
+const PORTRAIT_PLAN_SHARE_SHEET = 0.32;
+const DRAWER_IDS = Object.freeze(['detail', 'discovery', 'runs', 'programs', 'maintenance']);
 const $ = (id) => document.getElementById(id);
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -137,6 +145,25 @@ function stepTextSize(step) {
 }
 let sessionTextSize = null; // the size chosen on this page (kept when storage is blocked)
 
+/** This browser's Layout choice, or null when none was made (then the screen's shape decides). */
+function screenLayoutChoice() {
+  if (sessionScreenLayout !== null) return sessionScreenLayout;
+  let v = null;
+  try { v = localStorage.getItem(LAYOUT_KEY); } catch { /* per-viewer convenience only */ }
+  return v === 'landscape' || v === 'portrait' ? v : null;
+}
+/** Top bar Display menu → Layout: kept per browser; the drawers follow at once. */
+function setScreenLayout(choice) {
+  if (choice !== 'landscape' && choice !== 'portrait') return;
+  try { localStorage.setItem(LAYOUT_KEY, choice); } catch { /* the choice still applies until the page reloads */ }
+  sessionScreenLayout = choice;
+  layoutGeometry();
+  queueRender();
+}
+let sessionScreenLayout = null;
+/** A drawer is open (in Portrait it covers the machine rows, and the plan above it gets a little smaller). */
+const drawerOpen = () => DRAWER_IDS.some((id) => { const e = document.getElementById(id); return !!e && !e.hidden; });
+
 function applyScreen() {
   const profile = resolveScreen(url, state.settings);
   if (!profile.kiosk && !url.theme) {
@@ -172,10 +199,16 @@ function layoutGeometry() {
   // narrow portrait screens and phones on their side scroll one column: summary, plan, then machine cards
   const stacked = !state.profile?.kiosk && ((vw < 900 && vw < vh * 1.15) || (vh < 500 && vw < 1100));
   els.root.classList.toggle('stacked', stacked);
-  // a monitor turned on its side (a 1080 × 1920 office monitor, 2026-11-19): the plan across the top, the board
-  // below, instead of a plan squeezed beside a half-width board
-  const portrait = !stacked && !state.profile?.kiosk && !state.editing && vh > vw * 1.15;
+  // Portrait, for a monitor turned on its side (a 1080 × 1920 office monitor, 2026-11-19): the plan across the top,
+  // the board below, instead of a plan squeezed beside a half-width board; the drawers open over the board (2026-11-20).
+  // This browser's Layout choice (Display menu) decides; without one, the screen's shape does. Phones keep their one
+  // scrolling column, TVs and the editor the usual layout.
+  const choice = screenLayoutChoice();
+  const tall = vh > vw * 1.15;
+  const applies = !stacked && !state.profile?.kiosk && !state.editing;
+  const portrait = applies && (choice ? choice === 'portrait' : tall);
   els.root.classList.toggle('portrait', portrait);
+  topbar?.setScreenLayout(!stacked && !state.profile?.kiosk ? (choice ?? (tall ? 'portrait' : 'landscape')) : null);
   fitTopbar();
   if (stacked !== state.compact) {
     state.compact = stacked;
@@ -183,18 +216,24 @@ function layoutGeometry() {
     if (stacked) refreshTodayRuns();
     queueRender();
   }
+  if (!portrait) els.root.style.removeProperty('--sheet-top');
   if (stacked) { els.root.style.removeProperty('--board-w'); els.root.style.removeProperty('--plan-h'); return; }
   const safe = (state.profile.safeMarginPct / 100) * Math.min(vw, vh);
   const topH = els.topbar.getBoundingClientRect().height || 96 * k;
   const gap = 16 * k;
   if (portrait) {
-    // the plan as wide as the screen, as tall as its proportions need, but never more than 55 % of the height
+    // the plan as wide as the screen, as tall as its proportions need, but never more than 55 % of the height; while
+    // a drawer is open over the rows, at most 32 %, so the drawer shows more without scrolling (shop, 2026-11-20)
     const vbox = floorplan?.getViewBox() ?? { w: 88, h: 68 };
     const ratio = vbox.w > 0 && vbox.h > 0 ? vbox.w / vbox.h : 1.3;
     const usableW = vw - 2 * safe - 2.5 * gap;
-    const planH = Math.max(160, Math.min(usableW / ratio, (vh - 2 * safe - topH) * 0.55));
+    const share = drawerOpen() ? PORTRAIT_PLAN_SHARE_SHEET : PORTRAIT_PLAN_SHARE;
+    const planH = Math.max(160, Math.min(usableW / ratio, (vh - 2 * safe - topH) * share));
     els.root.style.setProperty('--plan-h', `${Math.round(planH)}px`);
     els.root.style.removeProperty('--board-w');
+    // the drawers start where the plan ends (hud.css :root.portrait .drawer)
+    const planBottom = els.plan?.getBoundingClientRect().bottom;
+    if (finite(planBottom) && planBottom > 0) els.root.style.setProperty('--sheet-top', `${Math.round(planBottom + gap / 2)}px`);
     return;
   }
   els.root.style.removeProperty('--plan-h');
@@ -450,6 +489,7 @@ function applySettings(settings) {
   applyScreen();
   updateSubtitle();
   syncMaintenance();
+  queueRender(); // a machine's warnings switched on or off (D19) changes its mark on the board
 }
 
 let layoutLoading = null;
@@ -577,7 +617,7 @@ function connect() {
       maintenancePanel?.onEvent(data);
       detail?.onMaintenanceEvent?.(data);
     },
-    settings(data) { if (isObj(data?.settings)) { applySettings(data.settings); programsPanel?.onSettings(); } },
+    settings(data) { if (isObj(data?.settings)) { applySettings(data.settings); programsPanel?.onSettings(); runsPanel?.refresh(); } },
     ping(data) { watchdog?.noteIdentity(data); },
     hello(data) { watchdog?.noteIdentity(data); },
     shutdown() { if (!state.stale) topbar.setLive('connecting', 'The HUD server is restarting…'); },
@@ -685,8 +725,9 @@ async function tokenProvider(info) {
   return r.token;
 }
 
-function toggleTheme() {
-  const next = state.theme === 'light' ? 'dark' : 'light';
+/** Top bar Display menu → Theme: kept per browser (a screen's ?theme= or its kiosk profile still decides there). */
+function setTheme(choice) {
+  const next = choice === 'light' || choice === 'dark' ? choice : state.theme === 'light' ? 'dark' : 'light';
   try { localStorage.setItem(THEME_KEY, next); } catch { /* per-viewer convenience only */ }
   applyScreen();
   queueRender();
@@ -725,8 +766,9 @@ async function boot() {
     onRuns: () => { detail.close(); discovery.close(); programsPanel?.close(); maintenancePanel?.close(); runsPanel?.toggle(); },
     onMaintenance: () => { detail.close(); discovery.close(); runsPanel?.close(); programsPanel?.close(); maintenancePanel?.toggle(); },
     onEdit: () => enterEditMode(),
-    onTheme: toggleTheme,
+    onTheme: setTheme,
     onTextSize: stepTextSize,
+    onScreenLayout: setScreenLayout,
     onSound: async () => { if (chime) { await chime.unlock(); topbar.setSound(chime.blocked ? 'blocked' : 'on'); } },
   });
   banner = createBanner(els.banner);
@@ -752,6 +794,7 @@ async function boot() {
     onBackgroundClick: () => detail.close(),
   });
   board = createBoard(els.head, els.rows, { onSelect: (id) => { discovery.close(); runsPanel.close(); programsPanel.close(); maintenancePanel.close(); detail.open(id); } });
+  startOverrideTicker(); // the override labels on board rows step together (D25)
   detail = createDetail(els.detail, {
     api,
     getMachine: (id) => {
@@ -799,6 +842,27 @@ async function boot() {
     requestToken: () => tokenProvider({ status: 0, path: '', message: 'Programs need the edit token.' }),
     demo: DEMO,
     toast,
+  });
+
+  // Portrait: a drawer opening or closing over the machine rows resizes the plan above it (layoutGeometry)
+  const drawerWatch = new MutationObserver(() => { if (els.root.classList.contains('portrait')) layoutGeometry(); });
+  for (const id of DRAWER_IDS) { const e = document.getElementById(id); if (e) drawerWatch.observe(e, { attributes: true, attributeFilter: ['hidden'] }); }
+
+  // programs dragged from the PC onto a machine's tile, name plate or board row (D16 amendment)
+  createFileDrop({
+    active: () => !!programsPanel && !state.profile?.kiosk && !state.editing && !isPreview(),
+    canDrop: (id) => {
+      const p = state.settings?.programs;
+      return !!(p?.enabled && isObj(p.machines) && Object.prototype.hasOwnProperty.call(p.machines, id) && p.machines[id]?.enabled);
+    },
+    onDrop: (id, files) => {
+      detail.close(); discovery.close(); runsPanel.close(); maintenancePanel?.close();
+      programsPanel.dropFiles(id, files);
+    },
+    onRefused: (id) => {
+      const lm = state.layout?.machines?.find((m) => m?.id === id);
+      toast(`Program transfer is not on for ${lm?.name || id}. Set it up in Programs › Setup.`, { kind: 'error', timeoutMs: 7000 });
+    },
   });
 
   maintenancePanel = createMaintenancePanel(els.maintenance, {

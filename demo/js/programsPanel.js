@@ -1,5 +1,6 @@
 // Program transfer drawer (docs/DECISIONS.md D16): a File Explorer for one machine's Data Server.
-//   - drag files in from the PC (or "Send files…" on phones and tablets) to send them;
+//   - drag files in from the PC (or "Send files…" on phones and tablets) to send them; files dropped on a machine's
+//     tile, name plate or board row come here too (dropFiles; public/js/fileDrop.js), with one "Send … to …?" first;
 //   - right-click a program (or its ⋯ button) to download it or delete it;
 //   - History lists every change, with Put back for replaced and deleted programs;
 //   - Setup turns transfer on, per machine, and saves each Data Server's login on the HUD PC.
@@ -7,6 +8,7 @@
 // HUD PC (src/programs/service.js); this panel asks and explains. Shop network and edit token only.
 // Every string is rendered with textContent.
 import { iconSvg } from './icons.js';
+import { programId } from '/shared/runs.js';
 
 /** Names the HUD sends (the server checks the same). */
 export const PROGRAM_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -63,7 +65,14 @@ export function formatModified(ms, now, { clock24h = false, timeZone } = {}) {
 
 /** How each machine reports to the HUD (Setup); program transfer itself is FTP, set per machine. */
 const PROTOCOL_LABELS = Object.freeze({ focas: 'FANUC', mtconnect: 'MTConnect', opcua: 'OPC UA', 'haas-mdc': 'Haas MDC' });
-const ACTION_TEXT = Object.freeze({ sent: 'Sent', replaced: 'Replaced', downloaded: 'Downloaded', deleted: 'Deleted', putback: 'Put back' });
+const ACTION_TEXT = Object.freeze({
+  sent: 'Sent', replaced: 'Replaced', downloaded: 'Downloaded', deleted: 'Deleted', putback: 'Put back',
+  'folder-made': 'Made the folder', 'folder-deleted': 'Deleted the folder', copied: 'Copied', moved: 'Moved',
+});
+/** A folder path in History: "MAIN › PART-A", or "the top folder". */
+const dirText = (d) => (Array.isArray(d) && d.length ? d.join(' › ') : 'the top folder');
+/** Folder names the HUD makes (src/programs/store.js NEW_FOLDER_RE). */
+export const FOLDER_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
 const RESULT_TEXT = Object.freeze({ checked: 'Read back and checked', done: 'Done', failed: 'Check failed' });
 
 /** One History line: { title, meta } (meta without the time, which the caller formats). */
@@ -73,6 +82,10 @@ export function historyText(e) {
   let title = `${ACTION_TEXT[e.action] ?? e.action ?? ''} ${name}`.trim();
   if (e.action === 'sent') title += ' (new)';
   if (e.action === 'putback' && finite(e.restoredModified)) title += ' (an earlier copy)';
+  const dir = Array.isArray(e.dir) ? e.dir.filter((x) => typeof x === 'string' && x) : [];
+  if (e.action === 'moved') title += ` to ${dirText(e.toDir)}, from ${dirText(dir)}`;
+  else if (e.action === 'copied') title += ` to ${dirText(dir)}, from ${dirText(e.fromDir)}`;
+  else if (dir.length) title += ` in ${dir.join(' › ')}`;
   const from = typeof e.from === 'string' && e.from ? (['127.0.0.1', '::1'].includes(e.from) ? 'the HUD PC' : e.from) : null;
   const meta = [from ? `from ${from}` : null, RESULT_TEXT[e.result] ?? null].filter(Boolean).join(' · ');
   return { title, meta };
@@ -90,8 +103,12 @@ export function createProgramsPanel(el, deps) {
   const demo = deps.demo === true;
   const st = {
     id: null, view: 'list', data: null, error: null, loading: false, menuFor: null, sending: null,
+    /** where a right-click opened the menu ({ x, y } in the window), or null: beside the row's ⋯ button */
+    menuAt: null,
     fresh: new Set(), historyOpen: false, history: null, historyError: null, overview: null, setupError: null, loginFor: null,
     linesLeft: 0, asking: false,
+    /** The open folder: names below the machine's folder ([] = its own folder). */
+    dir: [],
   };
   let loadSeq = 0;
   let linesSeq = 0;
@@ -117,6 +134,8 @@ export function createProgramsPanel(el, deps) {
 
   const toolbar = h('div', 'prog-toolbar');
   const sendBtn = button('Send files…', 'btn-accent', 'upload');
+  // beside the path bar: a folder is made where you are
+  const folderBtn = button('New folder', 'btn-small prog-new-folder', 'folder-plus');
   const refreshBtn = button('Refresh', null, 'refresh');
   const historyBtn = button('History', null, 'clock');
   const setupBtn = button('Setup', 'btn-quiet', 'sliders');
@@ -139,6 +158,8 @@ export function createProgramsPanel(el, deps) {
     const m = deps.getMachines().find((x) => x?.id === id);
     return typeof m?.name === 'string' && m.name ? m.name : id ?? '';
   };
+  /** "Wire EDM › MAIN › PART-A": where a send goes. */
+  const where = (dir = st.dir) => [machineName(), ...dir].join(' › ');
   const enabledIds = () => {
     const p = ctx().settings?.programs;
     return p?.enabled ? Object.keys(p.machines ?? {}).filter((k) => p.machines[k]?.enabled) : [];
@@ -155,12 +176,19 @@ export function createProgramsPanel(el, deps) {
     st.loading = true;
     render();
     try {
-      const data = await api.programs.list(st.id);
+      const data = await api.programs.list(st.id, st.dir);
       if (seq !== loadSeq) return;
       st.data = data;
       st.error = null;
     } catch (e) {
       if (seq !== loadSeq) return;
+      if (e?.code === 'FOLDER_NOT_FOUND' && st.dir.length) {
+        // the folder went away (deleted on the control): back to the machine's own folder
+        toast(e.message, { kind: 'error', timeoutMs: 8000 });
+        st.dir = [];
+        st.loading = false;
+        return load();
+      }
       st.data = null;
       st.error = e;
     } finally {
@@ -198,12 +226,13 @@ export function createProgramsPanel(el, deps) {
   async function readFirstLines() {
     const seq = ++linesSeq;
     const id = st.id;
+    const dir = [...st.dir];
     st.linesLeft = st.data?.firstLinesPending ?? 0;
-    const current = () => seq === linesSeq && st.id === id && !!st.data && !el.hidden && st.view === 'list';
+    const current = () => seq === linesSeq && st.id === id && st.dir.join('/') === dir.join('/') && !!st.data && !el.hidden && st.view === 'list';
     while (st.linesLeft > 0 && current()) {
       if (st.sending || st.asking) break; // never alongside a send or while a question is open (one session per machine)
       let r;
-      try { r = await api.programs.firstLines(id); } catch { break; }
+      try { r = await api.programs.firstLines(id, dir); } catch { break; }
       if (!current()) return;
       const lines = r?.lines ?? {};
       for (const f of st.data.files) {
@@ -276,7 +305,7 @@ export function createProgramsPanel(el, deps) {
     });
   }
 
-  const runningWarning = (running, program, name) => (running && program && program.toUpperCase() !== String(name).toUpperCase()
+  const runningWarning = (running, program, name) => (running && program && programId(program) !== programId(String(name))
     ? `${machineName()} is running ${program}. If ${program} calls ${name}, wait until the run ends.` : null);
 
   function lockedDialog(name, message) {
@@ -293,27 +322,28 @@ export function createProgramsPanel(el, deps) {
   // ---------------------------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------------------------
-  async function sendFiles(files) {
+  /** Send files into a folder (the open one, or a folder row or path part they were dropped on). */
+  async function sendFiles(files, dir = st.dir) {
     if (!st.data || st.sending) return;
     const maxBytes = (st.data.maxUploadMB ?? 100) * 1024 * 1024;
     for (const f of files) {
       if (!PROGRAM_NAME_RE.test(f.name) || /^\.+$/.test(f.name)) { toast(`${f.name}: program names may use letters, digits, dot, dash and underscore (max 64), with no spaces`, { kind: 'error', timeoutMs: 8000 }); continue; }
       if (!f.size) { toast(`${f.name} is empty`, { kind: 'error' }); continue; }
       if (f.size > maxBytes) { toast(`${f.name} is larger than ${st.data.maxUploadMB ?? 100} MB`, { kind: 'error' }); continue; }
-      await sendOne(f.name, f, false);
+      await sendOne(f.name, f, false, dir);
     }
     await load();
     if (st.historyOpen) loadHistory();
   }
 
-  async function sendOne(name, blob, replace) {
+  async function sendOne(name, blob, replace, dir = st.dir) {
     st.sending = { name, phase: replace ? 'Keeping the machine’s copy, sending, reading it back…' : 'Sending, then reading it back…' };
     render();
     let again = false;
     try {
-      const r = await api.programs.upload(st.id, name, blob, { replace });
-      st.fresh.add(String(r.name).toUpperCase());
-      toast(`${r.action === 'replaced' ? 'Replaced' : 'Sent'} ${r.name} on ${machineName()} · read back and checked${r.note ? ' (the Data Server stored it in its own text format; see History)' : ''}`, { kind: 'ok', timeoutMs: r.note ? 9000 : undefined });
+      const r = await api.programs.upload(st.id, name, blob, { replace, dir });
+      if (dir.join('/') === st.dir.join('/')) st.fresh.add(String(r.name).toUpperCase());
+      toast(`${r.action === 'replaced' ? 'Replaced' : 'Sent'} ${r.name} on ${where(dir)} · read back and checked${r.note ? ' (the Data Server stored it in its own text format; see History)' : ''}`, { kind: 'ok', timeoutMs: r.note ? 9000 : undefined });
     } catch (e) {
       st.sending = null;
       render();
@@ -322,7 +352,7 @@ export function createProgramsPanel(el, deps) {
         st.asking = true;
         const yes = await modal({
           heading: `Replace ${b.name ?? name}?`, icon: 'upload',
-          lines: [`${machineName()} already has ${b.name ?? name} (${formatBytes(b.size)}, ${formatModified(b.modified, ctx().now, clockOpts())}). The HUD keeps that copy before replacing it, so you can put it back from History.`],
+          lines: [`${where(dir)} already has ${b.name ?? name} (${formatBytes(b.size)}, ${formatModified(b.modified, ctx().now, clockOpts())}). The HUD keeps that copy before replacing it, so you can put it back from History.`],
           warn: runningWarning(b.running, b.program, b.name ?? name),
           actions: [{ label: 'Cancel', value: false }, { label: 'Replace', primary: true, value: true }],
         }).finally(() => { st.asking = false; });
@@ -334,13 +364,13 @@ export function createProgramsPanel(el, deps) {
       st.sending = null;
       render();
     }
-    if (again) await sendOne(name, blob, true);
+    if (again) await sendOne(name, blob, true, dir);
   }
 
   async function download(f) {
     closeMenu();
     try {
-      const blob = await api.programs.download(st.id, f.name);
+      const blob = await api.programs.download(st.id, f.name, { dir: st.dir });
       const url = URL.createObjectURL(blob);
       const a = h('a');
       a.href = url;
@@ -360,14 +390,14 @@ export function createProgramsPanel(el, deps) {
     if (f.inUse) { await lockedDialog(f.name); return; }
     const s = st.data?.status ?? {};
     const yes = await modal({
-      heading: `Delete ${f.name} from ${machineName()}?`, icon: 'trash',
+      heading: `Delete ${f.name} from ${where()}?`, icon: 'trash',
       lines: [`${previewFromFirstLine(f.firstLine) || f.comment ? `${previewFromFirstLine(f.firstLine) || f.comment}. ` : ''}The HUD keeps a copy on the HUD PC first, so you can put it back from History.`],
       warn: runningWarning(s.running, s.program, f.name),
       actions: [{ label: 'Cancel', value: false }, { label: 'Delete', primary: true, value: true }],
     });
     if (!yes) return;
     try {
-      await api.programs.remove(st.id, f.name);
+      await api.programs.remove(st.id, f.name, { dir: st.dir });
       toast(`Deleted ${f.name} · a copy is kept on the HUD PC`, { kind: 'ok' });
     } catch (e) {
       if (e?.code === 'IN_USE') await lockedDialog(f.name, e.message);
@@ -382,7 +412,7 @@ export function createProgramsPanel(el, deps) {
     const when = formatModified(entry.at, ctx().now, clockOpts());
     const yes = await modal({
       heading: `Put back ${entry.name}?`, icon: 'refresh',
-      lines: [`This puts back the copy of ${entry.name} the HUD kept ${when}. If ${machineName()} has a newer ${entry.name}, that one is kept first, so this can be undone too.`],
+      lines: [`This puts back the copy of ${entry.name} the HUD kept ${when}, into ${where(Array.isArray(entry.dir) ? entry.dir : [])}. If there is a newer ${entry.name} there, that one is kept first, so this can be undone too.`],
       actions: [{ label: 'Cancel', value: false }, { label: 'Put back', primary: true, value: true }],
     });
     if (!yes) return;
@@ -399,18 +429,329 @@ export function createProgramsPanel(el, deps) {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Folders
+  // ---------------------------------------------------------------------------------------------
+  /** Open a folder (a path below the machine's folder). */
+  function goTo(dir) {
+    closeMenu();
+    st.dir = dir;
+    st.data = null;
+    st.error = null;
+    render();
+    st.listLoad = load();
+    return st.listLoad;
+  }
+
+  /** Ask for a new folder's name; resolves the name or null. */
+  function askFolderName() {
+    return new Promise((resolve) => {
+      const dlg = document.createElement('dialog');
+      dlg.className = 'token-dialog prog-dialog';
+      const form = h('form', 'token-form');
+      const h2 = h('h2', null, 'New folder');
+      h2.prepend(iconSvg('folder-plus', { size: null }));
+      const label = h('label', 'prog-field');
+      label.append(h('span', null, `In ${where()}`));
+      const input = h('input');
+      input.maxLength = 32;
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      input.setAttribute('aria-label', 'Folder name');
+      label.append(input);
+      const hint = h('p', 'muted small', 'Letters, digits, dot, dash and underscore, up to 32, with no spaces.');
+      const row = h('div', 'dialog-actions');
+      const cancel = h('button', 'btn', 'Cancel');
+      cancel.type = 'button';
+      const make = h('button', 'btn btn-primary', 'Make the folder');
+      make.type = 'submit';
+      make.disabled = true;
+      row.append(cancel, make);
+      form.append(h2, label, hint, row);
+      dlg.append(form);
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; try { dlg.close(); } catch { /* closed */ } dlg.remove(); resolve(v); };
+      input.addEventListener('input', () => {
+        const v = input.value.trim();
+        const ok = FOLDER_NAME_RE.test(v) && !/^\.+$/.test(v);
+        make.disabled = !ok;
+        hint.classList.toggle('prog-warn', !!v && !ok);
+      });
+      form.addEventListener('submit', (ev) => { ev.preventDefault(); if (!make.disabled) finish(input.value.trim()); });
+      cancel.addEventListener('click', () => finish(null));
+      dlg.addEventListener('cancel', () => finish(null));
+      document.body.append(dlg);
+      dlg.showModal();
+      input.focus();
+    });
+  }
+
+  async function makeFolder() {
+    if (!st.data || st.sending) return;
+    st.asking = true;
+    const name = await askFolderName().finally(() => { st.asking = false; });
+    if (!name) return;
+    try {
+      await api.programs.makeFolder(st.id, name, { dir: st.dir });
+      toast(`Made the folder ${name} in ${where()}`, { kind: 'ok' });
+    } catch (e) {
+      if (['FOLDERS_NOT_SUPPORTED', 'FOLDER_EXISTS'].includes(e?.code)) await problemDialog(`${name} was not made`, e.message);
+      else toast(`${name}: ${e?.message ?? 'not made'}`, { kind: 'error', timeoutMs: 10000 });
+    }
+    await load();
+    if (st.historyOpen) loadHistory();
+  }
+
+  async function removeFolder(folder) {
+    closeMenu();
+    const yes = await modal({
+      heading: `Delete the folder ${folder.name} from ${where()}?`, icon: 'trash',
+      lines: ['Only an empty folder is deleted. If it has programs or folders in it, nothing is deleted.'],
+      actions: [{ label: 'Cancel', value: false }, { label: 'Delete the folder', primary: true, value: true }],
+    });
+    if (!yes) return;
+    try {
+      await api.programs.removeFolder(st.id, folder.name, { dir: st.dir });
+      toast(`Deleted the folder ${folder.name}`, { kind: 'ok' });
+    } catch (e) {
+      if (['FOLDER_NOT_EMPTY', 'FOLDERS_NOT_SUPPORTED'].includes(e?.code)) await problemDialog(`${folder.name} was not deleted`, e.message);
+      else toast(`${folder.name}: ${e?.message ?? 'not deleted'}`, { kind: 'error', timeoutMs: 10000 });
+    }
+    await load();
+    if (st.historyOpen) loadHistory();
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Copy and move between folders (a program row dragged onto a folder, or its ⋯ menu)
+  // ---------------------------------------------------------------------------------------------
+  /** Copy (move: false) or move a program from the open folder into `toDir`, asking before a replace. */
+  async function copyTo(f, toDir, move, replace = false) {
+    if (st.sending) return;
+    const verb = move ? 'Moving' : 'Copying';
+    st.sending = { name: f.name, phase: `${verb} to ${where(toDir)}, then reading it back…` };
+    render();
+    let again = false;
+    try {
+      const r = await api.programs.copy(st.id, f.name, { dir: st.dir, toDir, move, replace });
+      toast(`${move ? 'Moved' : 'Copied'} ${r.name} to ${where(toDir)} · read back and checked${move ? ' · the original is kept on the HUD PC' : ''}`, { kind: 'ok' });
+    } catch (e) {
+      st.sending = null;
+      render();
+      if (e?.code === 'EXISTS') {
+        const b = e.body ?? {};
+        st.asking = true;
+        again = !!(await modal({
+          heading: `Replace ${b.name ?? f.name} in ${where(toDir)}?`, icon: 'upload',
+          lines: [`${where(toDir)} already has ${b.name ?? f.name} (${formatBytes(b.size)}, ${formatModified(b.modified, ctx().now, clockOpts())}). The HUD keeps that copy before replacing it, so you can put it back from History.`],
+          warn: runningWarning(b.running, b.program, b.name ?? f.name),
+          actions: [{ label: 'Cancel', value: false }, { label: 'Replace', primary: true, value: true }],
+        }).finally(() => { st.asking = false; }));
+      } else if (e?.code === 'IN_USE') await lockedDialog(f.name, e.message);
+      else if (e?.code === 'STATUS_UNKNOWN') await problemDialog(`${f.name} was not ${move ? 'moved' : 'copied'}`, e.message);
+      else toast(`${f.name}: ${e?.message ?? `not ${move ? 'moved' : 'copied'}`}`, { kind: 'error', timeoutMs: 12000 });
+    } finally {
+      st.sending = null;
+      render();
+    }
+    if (again) { await copyTo(f, toDir, move, true); return; }
+    await load();
+    if (st.historyOpen) loadHistory();
+  }
+
+  /** A program dropped on a folder: copy or move it there? */
+  async function askCopyOrMove(f, toDir) {
+    st.asking = true;
+    const choice = await modal({
+      heading: `Copy or move ${f.name} to ${where(toDir)}?`, icon: 'folder',
+      lines: [f.inUse
+        ? `${f.name} is in use, so it can be copied but not moved.`
+        : 'Move puts it there and deletes it here. The HUD keeps a copy of the original, so a move can be put back from History.'],
+      actions: [{ label: 'Cancel', value: null }, { label: 'Copy', value: 'copy', primary: !!f.inUse }, ...(f.inUse ? [] : [{ label: 'Move', value: 'move', primary: true }])],
+    }).finally(() => { st.asking = false; });
+    if (choice === 'copy' || choice === 'move') await copyTo(f, toDir, choice === 'move');
+  }
+
+  /** Pick a folder on this machine (menu: Copy to folder…, Move to folder…). Resolves a path or null. */
+  function pickFolder({ heading, action, exclude }) {
+    return new Promise((resolve) => {
+      const dlg = document.createElement('dialog');
+      dlg.className = 'token-dialog prog-dialog prog-picker';
+      const form = h('div', 'token-form');
+      const h2 = h('h2', null, heading);
+      h2.prepend(iconSvg('folder', { size: null }));
+      const pathEl = h('div', 'prog-picker-path');
+      const listEl = h('div', 'prog-picker-list');
+      const note = h('p', 'muted small');
+      const row = h('div', 'dialog-actions');
+      const cancel = h('button', 'btn', 'Cancel');
+      cancel.type = 'button';
+      const ok = h('button', 'btn btn-primary', action);
+      ok.type = 'button';
+      row.append(cancel, ok);
+      form.append(h2, pathEl, listEl, note, row);
+      dlg.append(form);
+      let at = [];
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; try { dlg.close(); } catch { /* closed */ } dlg.remove(); resolve(v); };
+      async function show(dir) {
+        at = dir;
+        pathEl.replaceChildren(h('span', null, where(dir)));
+        listEl.replaceChildren(h('p', 'muted small', 'Reading the folders…'));
+        const same = dir.join('/') === exclude.join('/');
+        ok.disabled = true;
+        note.textContent = '';
+        let data;
+        try { data = await api.programs.list(st.id, dir); } catch (e) { listEl.replaceChildren(h('p', 'prog-warn small', e?.message ?? 'Could not read the folders.')); return; }
+        if (done || at !== dir) return;
+        listEl.replaceChildren();
+        if (dir.length) {
+          const up = button(`Up to ${dir.length > 1 ? dir[dir.length - 2] : machineName()}`, 'prog-picker-item', 'up');
+          up.addEventListener('click', () => show(dir.slice(0, -1)));
+          listEl.append(up);
+        }
+        for (const f of data.folders ?? []) {
+          const b = button(f.name, 'prog-picker-item', 'folder');
+          b.addEventListener('click', () => show([...dir, f.name]));
+          listEl.append(b);
+        }
+        if (!dir.length && !(data.folders ?? []).length) listEl.append(h('p', 'muted small', 'No folders here yet. Make one with New folder first.'));
+        ok.disabled = same;
+        note.textContent = same ? 'This is where it is now: pick another folder.' : `${action} into ${where(dir)}.`;
+      }
+      cancel.addEventListener('click', () => finish(null));
+      ok.addEventListener('click', () => { if (!ok.disabled) finish(at); });
+      dlg.addEventListener('cancel', () => finish(null));
+      document.body.append(dlg);
+      dlg.showModal();
+      show([]);
+    });
+  }
+
+  async function copyFromMenu(f, move) {
+    closeMenu();
+    if (move && f.inUse) { await lockedDialog(f.name); return; }
+    st.asking = true;
+    const toDir = await pickFolder({ heading: `${move ? 'Move' : 'Copy'} ${f.name} to…`, action: move ? 'Move here' : 'Copy here', exclude: st.dir })
+      .finally(() => { st.asking = false; });
+    if (toDir) await copyTo(f, toDir, move);
+  }
+
+  /**
+   * A drop target that stands for a folder (a folder row, the Up row, a part of the path bar): files from the PC are
+   * sent into it, a program dragged from the list is copied or moved into it.
+   */
+  const PROGRAM_DRAG = 'application/x-stacklight-program';
+  const isProgramDrag = (ev) => [...(ev.dataTransfer?.types ?? [])].includes(PROGRAM_DRAG);
+  function dropTarget(node, dirOf) {
+    const over = (ev) => {
+      const files = hasFiles(ev);
+      if ((!files && !isProgramDrag(ev)) || !st.data || st.sending) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.dataTransfer.dropEffect = files ? 'copy' : 'move';
+      node.classList.add('drop-into');
+      body.classList.remove('dragging');
+    };
+    node.addEventListener('dragenter', over);
+    node.addEventListener('dragover', over);
+    node.addEventListener('dragleave', (ev) => { if (!node.contains(ev.relatedTarget)) node.classList.remove('drop-into'); });
+    node.addEventListener('drop', (ev) => {
+      node.classList.remove('drop-into');
+      body.classList.remove('dragging');
+      if (!st.data || st.sending) return;
+      const toDir = dirOf();
+      if (hasFiles(ev)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        sendFiles([...ev.dataTransfer.files], toDir);
+        return;
+      }
+      if (!isProgramDrag(ev)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      let src = null;
+      try { src = JSON.parse(ev.dataTransfer.getData(PROGRAM_DRAG)); } catch { return; }
+      if (!src || src.id !== st.id || src.dir !== st.dir.join('/')) return;
+      if (toDir.join('/') === st.dir.join('/')) return;
+      const f = st.data.files.find((x) => x.name === src.name);
+      if (f) askCopyOrMove(f, toDir);
+    });
+    return node;
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Menu (right-click or ⋯)
   // ---------------------------------------------------------------------------------------------
-  function openMenu(name) {
-    st.menuFor = st.menuFor === name ? null : name;
+  // The open menu is drawn on the drawer itself, not in the scrolling list, and kept inside the drawer: a wide list
+  // (long program names) scrolls sideways, and a menu inside it would be cut off at the drawer's edge.
+  /** @type {{ menu: HTMLElement, anchor: HTMLElement }|null} the menu the current render built, and its ⋯ button */
+  let menuBuilt = null;
+  /** @type {HTMLElement|null} */
+  let menuEl = null;
+  let menuScroll = 0;
+  /** Open (or, from ⋯, toggle) a row's menu; a right-click opens it at the pointer. */
+  function openMenu(name, at = null) {
+    if (!at && st.menuFor === name) { closeMenu(); return; }
+    st.menuFor = name;
+    st.menuAt = at;
     render();
-    body.querySelector('.prog-menu button')?.focus();
+    menuEl?.querySelector('button')?.focus({ preventScroll: true });
   }
   function closeMenu() {
     if (st.menuFor === null) return;
     st.menuFor = null;
+    st.menuAt = null;
     render();
   }
+  /** A right-click's position, or null for one from the keyboard (the menu then opens beside the ⋯ button). */
+  const pointOf = (ev) => (ev.clientX || ev.clientY ? { x: ev.clientX, y: ev.clientY } : null);
+  /** The menu a row built: Escape closes it and puts the focus back on that row's ⋯ button. */
+  function offerMenu(menu, anchor, label) {
+    menu.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape') return;
+      ev.stopPropagation();
+      closeMenu();
+      [...body.querySelectorAll('.prog-more')].find((b) => b.getAttribute('aria-label') === label)?.focus();
+    });
+    menuBuilt = { menu, anchor };
+  }
+  /** After a render: put the menu on the drawer, beside its ⋯ button or at the pointer, inside the drawer's edges. */
+  function placeMenu() {
+    menuEl?.remove();
+    menuEl = null;
+    const built = menuBuilt;
+    menuBuilt = null;
+    if (!built || st.menuFor === null || el.hidden) return;
+    const { menu, anchor } = built;
+    menu.classList.add('floating');
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    el.append(menu);
+    menuEl = menu;
+    menuScroll = body.scrollTop;
+    const pad = 8;
+    const box = el.getBoundingClientRect();
+    const minX = Math.max(box.left, 0) + pad;
+    const maxX = Math.min(box.right, window.innerWidth) - pad;
+    const minY = Math.max(box.top, 0) + pad;
+    const maxY = Math.min(box.bottom, window.innerHeight) - pad;
+    const w = menu.offsetWidth;
+    const hgt = menu.offsetHeight;
+    let x;
+    let y;
+    if (st.menuAt) {
+      x = st.menuAt.x + w > maxX ? st.menuAt.x - w : st.menuAt.x;
+      y = st.menuAt.y + hgt > maxY ? st.menuAt.y - hgt : st.menuAt.y;
+    } else {
+      const r = anchor.getBoundingClientRect();
+      x = Math.min(r.right, maxX) - w;
+      y = r.bottom + hgt - 4 > maxY ? r.top - hgt + 4 : r.bottom - 4;
+    }
+    menu.style.left = `${Math.round(Math.max(minX, Math.min(x, maxX - w)))}px`;
+    menu.style.top = `${Math.round(Math.max(minY, Math.min(y, maxY - hgt)))}px`;
+  }
+  // scrolling the list moves the row away from its menu: close it (a re-render keeps the scroll, so it stays open)
+  body.addEventListener('scroll', () => { if (menuEl && Math.abs(body.scrollTop - menuScroll) > 24) closeMenu(); }, { passive: true });
+  window.addEventListener('resize', () => closeMenu());
   const onDocClick = (ev) => {
     if (st.menuFor !== null && !ev.target.closest?.('.prog-menu, .prog-more')) closeMenu();
   };
@@ -467,19 +808,31 @@ export function createProgramsPanel(el, deps) {
     const listReady = st.view === 'list' && !!st.data;
     sendBtn.hidden = st.view !== 'list';
     sendBtn.disabled = !listReady || !!st.sending;
+    folderBtn.hidden = st.view !== 'list';
+    folderBtn.disabled = !listReady || !!st.sending || d?.canGoDeeper === false;
     refreshBtn.hidden = st.view !== 'list';
     refreshBtn.disabled = st.loading;
     historyBtn.hidden = st.view !== 'list' || !st.id;
     setupBtn.querySelector('span').textContent = st.view === 'setup' ? 'Back to programs' : 'Setup';
     setupBtn.hidden = demo || (st.view === 'setup' && !st.id);
     const waiting = d?.previews?.paused && (d.firstLinesPending ?? 0) > 0 ? PREVIEW_WAIT[d.previews.paused] ?? '' : '';
+    const nFolders = d?.folders?.length ?? 0;
     summary.textContent = listReady
-      ? `${d.files.length} program${d.files.length === 1 ? '' : 's'}${st.loading ? ' · reading…' : st.linesLeft > 0 ? ` · reading previews, ${st.linesLeft} to go` : waiting ? ` · ${waiting}` : ''}`
+      ? `${d.files.length} program${d.files.length === 1 ? '' : 's'}${nFolders ? ` · ${nFolders} folder${nFolders === 1 ? '' : 's'}` : ''}${st.loading ? ' · reading…' : st.linesLeft > 0 ? ` · reading previews, ${st.linesLeft} to go` : waiting ? ` · ${waiting}` : ''}`
       : (st.loading ? 'Reading the Data Server…' : '');
   }
 
   function render() {
     if (el.hidden) return;
+    menuBuilt = null;
+    try {
+      renderList();
+    } finally {
+      placeMenu();
+    }
+  }
+
+  function renderList() {
     renderHead();
     if (st.view === 'setup') { renderSetup(); return; }
     body.replaceChildren();
@@ -490,6 +843,7 @@ export function createProgramsPanel(el, deps) {
     const d = st.data;
     if (d.status?.known === false) body.append(h('p', 'prog-status', 'The HUD has no live status from this machine right now, so programs can be sent but not replaced or deleted.'));
     else if (d.status?.running && d.status.program) body.append(h('p', 'prog-status', `Running ${d.status.program}. It stays locked while it runs or is selected.`));
+    body.append(pathBar());
     if (st.sending) {
       const row = h('div', 'prog-sending');
       row.append(iconSvg('upload', { size: null }), h('strong', null, st.sending.name), h('span', null, st.sending.phase));
@@ -506,16 +860,91 @@ export function createProgramsPanel(el, deps) {
     thead.append(hr);
     const tbody = h('tbody');
     lineCells = new Map();
+    if (st.dir.length) tbody.append(upRow());
+    for (const f of d.folders ?? []) tbody.append(folderRow(f));
     for (const f of d.files) tbody.append(fileRow(f));
     table.append(thead, tbody);
-    if (d.files.length) body.append(table);
-    else body.append(h('p', 'muted prog-msg', 'No programs on this Data Server yet.'));
+    if (d.files.length || d.folders?.length || st.dir.length) body.append(table);
+    if (!d.files.length && !d.folders?.length) body.append(h('p', 'muted prog-msg', st.dir.length ? 'This folder is empty.' : 'No programs on this Data Server yet.'));
     const drop = h('div', 'prog-drop');
-    drop.append(iconSvg('download', { size: null }), h('span', 'prog-drop-idle', `Drag files here from your PC to send them to ${machineName()}`), h('span', 'prog-drop-active', `Drop to send to ${machineName()}`));
+    drop.append(iconSvg('download', { size: null }), h('span', 'prog-drop-idle', `Drag files here from your PC to send them to ${where()}`), h('span', 'prog-drop-active', `Drop to send to ${where()}`));
     body.append(drop);
     body.append(h('p', 'note', demo
       ? 'Demo: this Data Server is simulated in your browser. Nothing is sent anywhere, and the programs reset when you reload. In a shop it works only on the shop network, and the HUD never selects or starts a program.'
       : 'Works only on the shop network. The HUD never selects or starts a program, and never touches parameters, offsets or macros.'));
+  }
+
+  /** Machine › folder › folder: each part opens that folder. */
+  function pathBar() {
+    const nav = h('nav', 'prog-path');
+    nav.setAttribute('aria-label', 'Folder');
+    const parts = [machineName(), ...st.dir];
+    parts.forEach((label, i) => {
+      if (i) nav.append(h('span', 'prog-path-sep', '›'));
+      if (i === parts.length - 1) {
+        const cur = h('span', 'prog-path-here', label);
+        cur.setAttribute('aria-current', 'location');
+        nav.append(i === 0 ? withIcon(cur) : cur);
+      } else {
+        const b = h('button', 'prog-path-part', label);
+        b.type = 'button';
+        b.addEventListener('click', () => goTo(st.dir.slice(0, i)));
+        dropTarget(b, () => st.dir.slice(0, i));
+        nav.append(i === 0 ? withIcon(b) : b);
+      }
+    });
+    nav.append(folderBtn);
+    return nav;
+  }
+  function withIcon(node) {
+    node.prepend(iconSvg('folder', { size: null }));
+    return node;
+  }
+
+  function upRow() {
+    const tr = h('tr', 'prog-folder-row prog-up');
+    const name = h('td', 'prog-name');
+    const parent = st.dir.length > 1 ? st.dir[st.dir.length - 2] : machineName();
+    name.append(iconSvg('up', { size: null }), h('span', null, `Up to ${parent}`));
+    tr.append(name, h('td', 'prog-line muted'), h('td', 'num'), h('td'), h('td', 'act'));
+    tr.tabIndex = 0;
+    tr.addEventListener('click', () => goTo(st.dir.slice(0, -1)));
+    tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') goTo(st.dir.slice(0, -1)); });
+    return dropTarget(tr, () => st.dir.slice(0, -1));
+  }
+
+  function folderRow(f) {
+    const key = `folder:${f.name}`;
+    const tr = h('tr', `prog-folder-row${st.menuFor === key ? ' menu-open' : ''}`);
+    tr.dataset.folder = f.name;
+    const name = h('td', 'prog-name');
+    name.append(iconSvg('folder', { size: null }), h('span', null, f.name));
+    const tdAct = h('td', 'act');
+    const more = button(null, 'btn-icon prog-more', 'dots');
+    more.setAttribute('aria-label', `More actions for the folder ${f.name}`);
+    more.setAttribute('aria-haspopup', 'menu');
+    more.setAttribute('aria-expanded', String(st.menuFor === key));
+    more.addEventListener('click', (ev) => { ev.stopPropagation(); openMenu(key); });
+    tdAct.append(more);
+    if (st.menuFor === key) {
+      const menu = h('div', 'prog-menu');
+      menu.setAttribute('role', 'menu');
+      const open = button('Open', 'prog-menu-item', 'folder');
+      open.setAttribute('role', 'menuitem');
+      open.addEventListener('click', (ev) => { ev.stopPropagation(); goTo([...st.dir, f.name]); });
+      const del = button('Delete the folder (if empty)…', 'prog-menu-item', 'trash');
+      del.setAttribute('role', 'menuitem');
+      del.addEventListener('click', (ev) => { ev.stopPropagation(); removeFolder(f); });
+      menu.append(open, del);
+      offerMenu(menu, more, more.getAttribute('aria-label'));
+    }
+    tr.append(name, h('td', 'prog-line muted', 'Folder'), h('td', 'num'), h('td', 'muted nowrap', formatModified(f.modified, ctx().now, clockOpts())), tdAct);
+    tr.tabIndex = 0;
+    const canGo = st.data?.canGoDeeper !== false;
+    tr.addEventListener('click', (ev) => { if (canGo && !ev.target.closest?.('.act')) goTo([...st.dir, f.name]); });
+    tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && canGo && ev.target === tr) goTo([...st.dir, f.name]); });
+    tr.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(key, pointOf(ev)); });
+    return dropTarget(tr, () => [...st.dir, f.name]);
   }
 
   function fileRow(f) {
@@ -538,18 +967,32 @@ export function createProgramsPanel(el, deps) {
       const dl = button('Download to this PC', 'prog-menu-item', 'download');
       dl.setAttribute('role', 'menuitem');
       dl.addEventListener('click', () => download(f));
+      const cp = button('Copy to folder…', 'prog-menu-item', 'folder');
+      cp.setAttribute('role', 'menuitem');
+      cp.addEventListener('click', () => copyFromMenu(f, false));
+      const mv = button(f.inUse ? 'Move: in use' : 'Move to folder…', `prog-menu-item${f.inUse ? ' muted' : ''}`, f.inUse ? 'lock' : 'folder');
+      mv.setAttribute('role', 'menuitem');
+      mv.addEventListener('click', () => copyFromMenu(f, true));
       const del = button(f.inUse ? 'Delete: in use' : 'Delete from the machine…', `prog-menu-item${f.inUse ? ' muted' : ''}`, f.inUse ? 'lock' : 'trash');
       del.setAttribute('role', 'menuitem');
       del.addEventListener('click', () => remove(f));
-      menu.append(dl, del);
-      menu.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeMenu(); more.focus(); } });
-      tdAct.append(menu);
+      menu.append(dl, cp, mv, del);
+      offerMenu(menu, more, more.getAttribute('aria-label'));
     }
+    // drag onto a folder (row, Up row or path bar) to copy or move it there
+    tr.draggable = !st.sending;
+    tr.addEventListener('dragstart', (ev) => {
+      ev.dataTransfer.setData(PROGRAM_DRAG, JSON.stringify({ id: st.id, dir: st.dir.join('/'), name: f.name }));
+      ev.dataTransfer.setData('text/plain', f.name);
+      ev.dataTransfer.effectAllowed = 'copyMove';
+      body.classList.add('dragging-program');
+    });
+    tr.addEventListener('dragend', () => { body.classList.remove('dragging-program'); for (const n of el.querySelectorAll('.drop-into')) n.classList.remove('drop-into'); });
     const line = h('td', 'prog-cmt prog-line muted');
     lineCells.set(f.name, line);
     paintLine(f);
     tr.append(name, line, h('td', 'num', formatBytes(f.size)), h('td', 'muted nowrap', formatModified(f.modified, ctx().now, clockOpts())), tdAct);
-    tr.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(f.name); });
+    tr.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openMenu(f.name, pointOf(ev)); });
     return tr;
   }
 
@@ -798,7 +1241,7 @@ export function createProgramsPanel(el, deps) {
   function showList() {
     st.view = 'list';
     render();
-    load();
+    st.listLoad = load();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -811,7 +1254,8 @@ export function createProgramsPanel(el, deps) {
     if (st.historyOpen) { st.historyOpen = false; renderHistory(); return; }
     api_close();
   });
-  pick.addEventListener('change', () => { st.id = pick.value; st.data = null; st.error = null; st.fresh.clear(); st.history = null; render(); load(); if (st.historyOpen) loadHistory(); });
+  pick.addEventListener('change', () => { st.id = pick.value; st.dir = []; st.data = null; st.error = null; st.fresh.clear(); st.history = null; render(); load(); if (st.historyOpen) loadHistory(); });
+  folderBtn.addEventListener('click', () => makeFolder());
   sendBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
     const files = [...(fileInput.files ?? [])];
@@ -831,19 +1275,22 @@ export function createProgramsPanel(el, deps) {
     el.hidden = true;
     historyEl.hidden = true;
     st.menuFor = null;
+    st.menuAt = null;
+    menuEl?.remove();
+    menuEl = null;
     document.removeEventListener('click', onDocClick, true);
     document.removeEventListener('dragover', blockStrayDrop);
     document.removeEventListener('drop', blockStrayDrop);
     deps.onClose?.();
   }
 
-  return {
+  const panel = {
     /** Open for a machine (view 'list', or 'setup' to set transfer up). */
     open(id, { view = 'list' } = {}) {
       if (ctx().kiosk) return;
       const changed = id !== st.id;
       st.id = id ?? st.id ?? enabledIds()[0] ?? null;
-      if (changed) { st.data = null; st.error = null; st.fresh.clear(); st.history = null; st.historyOpen = false; }
+      if (changed) { st.data = null; st.error = null; st.dir = []; st.fresh.clear(); st.history = null; st.historyOpen = false; }
       el.hidden = false;
       document.addEventListener('click', onDocClick, true);
       document.addEventListener('dragover', blockStrayDrop);
@@ -857,5 +1304,31 @@ export function createProgramsPanel(el, deps) {
     onSettings() { if (!el.hidden) { if (st.view === 'setup') loadOverview(); else render(); } },
     get isOpen() { return !el.hidden; },
     get currentId() { return st.id; },
+    /**
+     * Files dropped on a machine on the dashboard (its tile, name plate or board row): open its explorer, ask once
+     * which machine they go to (a tile is easy to miss by one), then send them exactly as a drop in this panel would:
+     * the name and size checks, "Replace …?" for a name the machine has, read back and check. Resolves when done.
+     * @param {string} id @param {File[]|FileList} files
+     */
+    async dropFiles(id, files) {
+      const list = [...(files ?? [])].filter((f) => f && typeof f.name === 'string');
+      if (ctx().kiosk || !id || !list.length) return;
+      panel.open(id);
+      await st.listLoad;
+      // the explorer says why when it cannot list this machine (shop network only, the token, setup)
+      if (el.hidden || st.id !== id || st.view !== 'list' || !st.data) return;
+      if (st.sending || st.asking) { toast(`Wait until ${machineName()} has finished the current send`, { kind: 'error' }); return; }
+      const shown = list.slice(0, 6).map((f) => `${f.name} (${formatBytes(f.size)})`);
+      st.asking = true;
+      const yes = await modal({
+        heading: list.length === 1 ? `Send ${list[0].name} to ${where()}?` : `Send ${list.length} files to ${where()}?`,
+        icon: 'upload',
+        lines: [...shown, ...(list.length > 6 ? [`and ${list.length - 6} more`] : []),
+          'Each one is read back and checked. If the machine already has a program by that name, the HUD asks before replacing it.'],
+        actions: [{ label: 'Cancel', value: false }, { label: 'Send', primary: true, value: true }],
+      }).finally(() => { st.asking = false; });
+      if (yes && !el.hidden && st.id === id) await sendFiles(list);
+    },
   };
+  return panel;
 }

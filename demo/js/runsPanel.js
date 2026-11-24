@@ -1,16 +1,23 @@
 // Run report (view mode, docs/DECISIONS.md D12): program runs from GET /api/runs for a period (today, yesterday,
 // 7 or 30 days) and a machine — totals, one row per program (runs, parts, average and best cycle, time) and the runs
 // themselves, newest first, with Invalidate… / Count again (edit token) and a CSV download of what is shown.
+// Called programs (D21): each run lists the subprograms it called and its machine macros; the shop's subprograms
+// also get a row of their own in the Programs table ("called from …"), and the program search finds them.
+// Loader programs (D22): a program that loads others (a pallet main) can be set as a loader for its machine from here
+// (edit token); its loads are then the runs ("loaded by O0001") and its own runs are left out of the report.
 // Live: SSE 'runs' events update the list while the panel is open. Every string is rendered with textContent.
 import { formatDuration, formatNumber } from '/shared/format.js';
 import {
   summarizeRuns, runsToCsv, runDuration, runParts, sortRuns, OUTCOME_LABELS, INVALID_REASONS, INVALID_NOTE_MAX, programKey,
+  callsOf, summarizeCalls, runCalled, parseCallKey, isLoaderProgram, loadersOf, programId,
 } from '/shared/runs.js';
 import { iconSvg } from './icons.js';
 import { formatTimeOfDay, formatSinceClock, paletteFor } from './statusStyle.js';
 
 const PAGE = 100;
 const TOP_PROGRAMS = 10;
+/** Called programs named on a run's line before "+N more" (the full list is in the line's tooltip). */
+const CALLS_SHOWN = 3;
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -74,7 +81,7 @@ export function createRunsPanel(el, deps) {
   const { api, getContext, getMachines, toast, onClose, readOnly } = deps;
   let range = '7d';
   let machine = '';
-  let program = null;   // programKey of the selected program row
+  let program = null;   // programKey (or callKey) of the selected program row
   let search = '';
   let shown = PAGE;
   let allPrograms = false;
@@ -89,6 +96,9 @@ export function createRunsPanel(el, deps) {
   /** SSE run updates that arrive while a load is in flight (applied after it, so they are not lost) */
   let pendingEvents = [];
   let formFor = null;
+  /** the selected program's "loads other programs" question is open (D22) */
+  let loaderAsk = false;
+  let loaderSaving = false;
   /** @type {HTMLFormElement|null} */
   let form = null;
   let renderQueued = false;
@@ -287,14 +297,22 @@ export function createRunsPanel(el, deps) {
   // ---- rendering ---------------------------------------------------------------------------
 
   /** Runs after the program search and the selected program row, newest first. */
+  /** A run of a program that is now a loader on its machine (D22): not a run of its own, so not in the report. */
+  function isLoaderRun(r) {
+    return !r.loader && isLoaderProgram(loadersOf(getContext().settings, r.machineId), r.program);
+  }
+
   function filtered() {
-    let list = runs.filter(inView);
-    if (search) list = list.filter((r) => `${r.program ?? ''} ${r.programComment ?? ''}`.toLowerCase().includes(search));
+    let list = runs.filter((r) => inView(r) && !isLoaderRun(r));
+    // the program, its comment and every program it called (subprograms and macros)
+    if (search) list = list.filter((r) => `${r.program ?? ''} ${r.programComment ?? ''} ${Array.isArray(r.calls) ? r.calls.map((c) => c?.program ?? '').join(' ') : ''}`.toLowerCase().includes(search));
     return sortRuns(list);
   }
   function visibleRuns() {
     const list = filtered();
-    return program ? list.filter((r) => programKey(r) === program) : list;
+    if (!program) return list;
+    const call = parseCallKey(program);
+    return call ? list.filter((r) => r.machineId === call.machineId && runCalled(r, call.program)) : list.filter((r) => programKey(r) === program);
   }
 
   function syncToolbar() {
@@ -343,7 +361,10 @@ export function createRunsPanel(el, deps) {
     if (loadError) parts.push(h('p', 'error', `Could not load runs: ${loadError}`));
 
     const list = filtered();
-    const { total, programs } = summarizeRuns(list, { now });
+    const { total, programs: mains } = summarizeRuns(list, { now });
+    // the shop's subprograms the runs called get rows of their own, next to the runs that called them (D21)
+    const programs = [...mains, ...summarizeCalls(list).map((c) => ({ ...c, called: true, lastStart: c.last }))]
+      .sort((a, b) => (b.lastStart ?? -Infinity) - (a.lastStart ?? -Infinity) || String(a.program).localeCompare(String(b.program)));
     const period = h('p', 'runs-period');
     period.append(h('span', null, periodText(now, co)));
     if (machine) period.append(h('span', 'tag', (getMachines?.() ?? []).find((m) => m.id === machine)?.name ?? machine));
@@ -366,6 +387,8 @@ export function createRunsPanel(el, deps) {
     const ph = h('h3', null, 'Programs');
     ph.append(h('span', 'count', String(programs.length)));
     ps.append(ph);
+    const lp = loaderLine();
+    if (lp) ps.append(lp);
     if (!programs.length) {
       ps.append(h('p', 'muted', loading ? 'Loading…' : search ? 'No program matches.' : 'No runs in this period. A run is recorded when a machine runs a program in automatic mode; the HUD only knows the runs it has seen while it was running.'));
     } else {
@@ -379,6 +402,7 @@ export function createRunsPanel(el, deps) {
       const top = allPrograms || search ? programs : programs.slice(0, TOP_PROGRAMS);
       if (program && !top.some((p) => p.key === program)) { const sel = programs.find((p) => p.key === program); if (sel) top.push(sel); }
       for (const p of top) {
+        if (p.called) { tb.append(calledRow(p, now, co)); continue; }
         const tr = h('tr', `prog-row${program === p.key ? ' selected' : ''}`);
         tr.tabIndex = 0;
         tr.setAttribute('aria-selected', String(program === p.key));
@@ -394,7 +418,7 @@ export function createRunsPanel(el, deps) {
         tr.append(name, h('td', 'mach', p.machineName), runsCell, partsCell, h('td', 'num', dur(p.avgCycleMs)), h('td', 'num', dur(p.minCycleMs)),
           h('td', 'num', none ? '—' : dur(p.timeMs)), h('td', 'nowrap', p.lastStart === null ? '—' : formatSinceClock(p.lastStart, now, co)));
         labelCells(tr, ['', '', 'Runs', 'Parts', 'Avg cycle', 'Best', 'Time in runs', 'Last run']);
-        const toggle = () => { program = program === p.key ? null : p.key; shown = PAGE; render(); };
+        const toggle = () => { program = program === p.key ? null : p.key; loaderAsk = false; shown = PAGE; render(); };
         tr.addEventListener('click', toggle);
         tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } });
         tb.append(tr);
@@ -415,14 +439,18 @@ export function createRunsPanel(el, deps) {
     const vis = visibleRuns();
     const rh = h('h3', null, 'Runs');
     rh.append(h('span', 'count', String(vis.length)));
+    let ask = null;
     if (program) {
       const sel = programs.find((p) => p.key === program);
       const all = button(`${sel?.program ?? 'Program'} · show all`, 'btn-quiet btn-chip', 'close');
       all.title = 'Show the runs of every program';
-      all.addEventListener('click', () => { program = null; render(); });
+      all.addEventListener('click', () => { program = null; loaderAsk = false; render(); });
       rh.append(all);
+      ask = loaderOffer(sel, vis);
+      if (ask?.button) rh.append(ask.button);
     }
     rs.append(rh);
+    if (ask?.form) rs.append(ask.form);
     if (vis.length) {
       const wrap = h('div', 'table-wrap');
       const t = h('table', 'runs-table runs-list');
@@ -451,6 +479,7 @@ export function createRunsPanel(el, deps) {
         rs.append(more);
       }
       rs.append(h('p', 'hint', 'Elapsed = start to end. The bar splits it into in cycle, paused (feed hold, M00/M01) and stopped (alarm, E-stop, no data). "≥" = the HUD started while the program was already running. Parts come from the machine’s part counter.'));
+      rs.append(h('p', 'hint', 'Called = subprograms the program called (M98, M198, G65). Macros = the machine’s own macros, O8000–O9999 (tool and pallet changes, probing). Each shows how many times it was called and how long it ran itself; a subprogram’s time leaves out the macros it called. A call shorter than about a second can be missed, and the same subprogram called again with only macros in between counts once.'));
     } else if (programs.length) {
       rs.append(h('p', 'muted', 'No runs.'));
     }
@@ -464,6 +493,116 @@ export function createRunsPanel(el, deps) {
     if (active && active.isConnected && document.activeElement !== active) active.focus({ preventScroll: true });
   }
 
+  // ---- loader programs (D22) -----------------------------------------------------------------
+
+  const canEdit = () => !getContext().kiosk && !readOnly?.();
+  const machineName = (id) => (getMachines?.() ?? []).find((m) => m.id === id)?.name ?? id;
+
+  /** Save a machine's loader programs (the whole list). */
+  async function saveLoaders(machineId, list, done) {
+    loaderSaving = true;
+    render();
+    try {
+      await api.settings.save({ runs: { machines: { [machineId]: { loaders: list } } } });
+      done();
+    } catch (e) {
+      toast?.(`Not saved: ${e.message}`, { kind: 'error' });
+    } finally {
+      loaderSaving = false;
+      render();
+    }
+  }
+
+  /** "O0001 loads programs on HMC: …" for every loader set on the machines in view, each with an undo. */
+  function loaderLine() {
+    const settings = getContext().settings;
+    const ids = machine ? [machine] : Object.keys(settings?.runs?.machines ?? {});
+    const items = ids.flatMap((id) => loadersOf(settings, id).map((p) => ({ id, p })));
+    if (!items.length) return null;
+    const box = h('div', 'runs-loaders');
+    for (const { id, p } of items) {
+      const hidden = runs.filter((r) => r.machineId === id && !r.loader && inView(r) && programId(r.program) === programId(p)).length;
+      const line = h('p', 'muted small');
+      line.append(h('strong', null, p), ` loads programs on ${machineName(id)}: each program it loads is a run, and ${p} itself is not counted${hidden ? ` (${hidden} earlier run${hidden === 1 ? '' : 's'} of it left out)` : ''}.`);
+      if (canEdit()) {
+        const undo = button(`Count ${p} as a program again`, 'btn-quiet btn-small');
+        undo.disabled = loaderSaving;
+        undo.addEventListener('click', () => saveLoaders(id, loadersOf(settings, id).filter((x) => programId(x) !== programId(p)), () => toast?.(`${p} is counted as a program again`, { kind: 'ok' })));
+        line.append(' ', undo);
+      }
+      box.append(line);
+    }
+    return box;
+  }
+
+  /** For the selected program row: "O0001 loads other programs…" and its question (not for a loader already). */
+  function loaderOffer(sel, vis) {
+    if (!sel || sel.called || !sel.program || !canEdit()) return null;
+    const machineId = sel.machineId;
+    const settings = getContext().settings;
+    if (isLoaderProgram(loadersOf(settings, machineId), sel.program) || vis.some((r) => r.loader)) return null;
+    const b = button(`${sel.program} loads other programs…`, 'btn-quiet btn-chip');
+    b.title = 'A pallet program that loads the part programs: count the programs it loads instead of it';
+    b.setAttribute('aria-expanded', String(loaderAsk));
+    b.addEventListener('click', () => { loaderAsk = !loaderAsk; render(); });
+    if (!loaderAsk) return { button: b };
+    const f = h('div', 'inv-form loader-form');
+    f.append(h('div', 'inv-title', `Is ${sel.program} a program that loads others on ${machineName(machineId)}, such as a pallet program?`),
+      h('p', 'muted small', `From now on each program it loads is a run, from when it starts to when it finishes, and ${sel.program} itself is not counted. Its earlier runs are left out of the report.`));
+    const actions = h('div', 'dialog-actions');
+    const cancel = h('button', 'btn', 'Cancel');
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => { loaderAsk = false; render(); });
+    const ok = h('button', 'btn btn-primary', `Yes, ${sel.program} loads programs`);
+    ok.type = 'button';
+    ok.disabled = loaderSaving;
+    ok.addEventListener('click', () => saveLoaders(machineId, [...loadersOf(settings, machineId), sel.program], () => {
+      loaderAsk = false;
+      program = null;
+      toast?.(`${sel.program} is a loader on ${machineName(machineId)}: the programs it loads are the runs`, { kind: 'ok' });
+    }));
+    actions.append(cancel, ok);
+    f.append(actions);
+    return { button: b, form: f };
+  }
+
+  /** "O1234 ×2 (36m 05s)" */
+  function callText(c) {
+    return `${c.program}${c.calls > 1 ? ` ×${formatNumber(c.calls)}` : ''} (${dur(c.ms)})`;
+  }
+
+  /** One line under a run's program: "Called: O1234 ×2 (36m 05s) · O5678 (45s) · +2 more". */
+  function callsLine(label, list, cls, extra) {
+    const items = list.slice(0, CALLS_SHOWN).map(callText);
+    if (list.length > CALLS_SHOWN) items.push(`+${list.length - CALLS_SHOWN} more`);
+    if (extra) items.push(extra);
+    const d = h('div', `${cls} small`, `${label}: ${items.join(' · ')}`);
+    d.title = [...list.map(callText), ...(extra ? [extra] : [])].join('\n');
+    return d;
+  }
+
+  /**
+   * A Programs row for a subprogram the runs called (D21): the runs that called it and its calls, the time it ran
+   * itself; no parts or cycle times of its own (those belong to the runs that called it).
+   */
+  function calledRow(p, now, co) {
+    const tr = h('tr', `prog-row call-row${program === p.key ? ' selected' : ''}`);
+    tr.tabIndex = 0;
+    tr.setAttribute('aria-selected', String(program === p.key));
+    tr.title = program === p.key ? 'Show all programs' : 'Show only the runs that called this program';
+    const name = h('td', 'prog');
+    name.append(h('div', 'prog-name', p.program), h('div', 'muted prog-cmt', `called from ${p.callers.join(', ') || 'another program'}`));
+    const runsCell = h('td', 'num', formatNumber(p.runs));
+    runsCell.append(h('div', 'muted small', `${formatNumber(p.calls)} call${p.calls === 1 ? '' : 's'}`));
+    tr.append(name, h('td', 'mach', p.machineName), runsCell, h('td', 'num', '—'), h('td', 'num', '—'), h('td', 'num', '—'),
+      h('td', 'num', dur(p.ms)), h('td', 'nowrap', p.last === null ? '—' : formatSinceClock(p.last, now, co)));
+    labelCells(tr, ['', '', 'Runs', 'Parts', 'Avg cycle', 'Best', 'Time running it', 'Last call']);
+    const toggle = () => { program = program === p.key ? null : p.key; shown = PAGE; render(); };
+    tr.addEventListener('click', toggle);
+    tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } });
+    return tr;
+  }
+
   function runRow(r, now, co, ctx) {
     const tr = h('tr', `run-row o-${r.outcome}${r.invalid ? ' invalid' : ''}`);
     const started = h('td', 'nowrap', `${r.startIsLowerBound ? '≥ ' : ''}${formatSinceClock(r.start, now, co)}`);
@@ -471,6 +610,11 @@ export function createRunsPanel(el, deps) {
     const prog = h('td', 'prog');
     prog.append(h('div', 'prog-name', r.program ?? '(no program name)'));
     if (r.programComment) prog.append(h('div', 'muted prog-cmt', r.programComment));
+    if (r.loader) prog.append(h('div', 'muted prog-cmt prog-loaded', `loaded by ${r.loader}`));
+    const cl = callsOf(r);
+    const moreText = cl.more ? `+${formatNumber(cl.more.calls)} more call${cl.more.calls === 1 ? '' : 's'}` : null;
+    if (cl.subs.length) prog.append(callsLine('Called', cl.subs, 'prog-calls', cl.macros.length ? null : moreText));
+    if (cl.macros.length) prog.append(callsLine(`Macros ${dur(cl.macroMs)}`, cl.macros, 'prog-macros muted', moreText));
 
     const elapsed = runDuration(r, now);
     const el2 = h('td', 'num');

@@ -143,6 +143,62 @@ export function firstOutFault(snapshot) {
   return { code: first.nativeCode ? String(first.nativeCode) : '', message, more: sorted.length - 1, condition: first };
 }
 
+/** A FANUC message's address (PMC A area): its condition code, e.g. 'A14.2' (DECISIONS D19). */
+export const MESSAGE_ADDRESS_RE = /^A\d{1,4}\.[0-7]$/;
+/** The names a shop gave this machine's FANUC messages: { 'A14.2': 'Tool life warning' } (settings.warnings). */
+export function messageLabels(settings, id) {
+  const m = settings?.warnings?.machines;
+  const e = typeof id === 'string' && m && Object.prototype.hasOwnProperty.call(m, id) ? m[id] : null;
+  return e && typeof e.labels === 'object' && e.labels ? e.labels : {};
+}
+/** The name for a condition code on this machine, or null. */
+export function messageLabel(settings, id, code) {
+  if (typeof code !== 'string' || !MESSAGE_ADDRESS_RE.test(code)) return null;
+  const labels = messageLabels(settings, id);
+  return Object.prototype.hasOwnProperty.call(labels, code) && typeof labels[code] === 'string' && labels[code] ? labels[code] : null;
+}
+
+/** The machine's warnings are switched off for the tiles and board (DECISIONS D19). */
+export function warningsHidden(settings, id) {
+  const m = settings?.warnings?.machines;
+  return typeof id === 'string' && !!m && Object.prototype.hasOwnProperty.call(m, id) && m[id]?.show === false;
+}
+
+/** The machine's overrides are switched off for the tiles and board (settings.overrides.machines, D25). */
+export function overridesHidden(settings, id) {
+  const m = settings?.overrides?.machines;
+  return typeof id === 'string' && !!m && Object.prototype.hasOwnProperty.call(m, id) && m[id]?.show === false;
+}
+
+const OVERRIDE_KINDS = [['feedOverride', 'FEED'], ['rapidOverride', 'RAPID'], ['spindleOverride', 'SPINDLE']];
+
+/** Every override the machine reports, in the order feed, rapid, spindle: [{ key, word, pct }] (rounded). */
+function reportedOverrides(values) {
+  const out = [];
+  for (const [key, word] of OVERRIDE_KINDS) {
+    const v = values?.[key];
+    if (typeof v === 'number' && Number.isFinite(v)) out.push({ key, word, pct: Math.round(v) });
+  }
+  return out;
+}
+
+/** The overrides away from 100 %, in the order feed, rapid, spindle: [{ key, word, pct, text: 'FEED 50%' }] (D25). */
+export function activeOverrides(values) {
+  return reportedOverrides(values).filter((o) => o.pct !== 100).map((o) => ({ ...o, text: `${o.word} ${o.pct}%` }));
+}
+
+/**
+ * The bars of a plan tile's override chart (D25): one for each override the machine reports, feed, rapid, spindle,
+ * with its level: 'stop' for the feed at 0 % (in cycle and nothing moves), 'low' below 100 %, 'full' at 100 %,
+ * 'over' above. Only the feed can be 'stop': a FANUC rapid switch at F0 is reported as 0 % and still moves.
+ */
+export function overrideBars(values) {
+  return reportedOverrides(values).map((o) => ({
+    ...o,
+    level: o.key === 'feedOverride' && o.pct <= 0 ? 'stop' : o.pct < 100 ? 'low' : o.pct > 100 ? 'over' : 'full',
+  }));
+}
+
 /**
  * Snapshot for a layout machine that the server has not reported yet.
  * @param {object} lm layout machine
@@ -191,7 +247,18 @@ export function machineView(snapshot, lm, ctx) {
     fill: pal.fill, ink: pal.ink, border: pal.border, borderColor: pal.borderColor, pattern: pal.pattern, outline: pal.outline,
     reason: null, fullReason: snap.reason ? String(snap.reason) : '',
     timer: null, down: null, fault: null, program: null, note: null,
-    badge: status === 'ALARM' || status === 'ESTOP' ? null : snap.badge === 'fault' || snap.badge === 'warning' ? snap.badge : null,
+    // active-condition mark (D19): a fault while running, or the yellow warning mark unless this machine's warnings
+    // are switched off (settings.warnings.machines.<id>.show)
+    // no mark on a machine the HUD cannot see (OFFLINE, no data): its last conditions are not current
+    badge: status === 'ALARM' || status === 'ESTOP' || status === 'OFFLINE' || status === 'UNAVAILABLE' ? null
+      : snap.badge === 'fault' ? 'fault'
+        : snap.badge === 'warning' && !warningsHidden(settings, lm?.id ?? snap.id) ? 'warning' : null,
+    warningsHidden: warningsHidden(settings, lm?.id ?? snap.id),
+    // overrides away from 100 % while in cycle (D25), unless switched off for this machine: the board's label steps
+    // through `overrides`; the tile's chart has a bar for every override the machine reports (`overrideBars`)
+    overrides: [],
+    overrideBars: [],
+    overridesHidden: overridesHidden(settings, lm?.id ?? snap.id),
     attention, inShift: attention.inShift,
     sinceAge: finite(snap.since) && finite(now) ? Math.max(0, now - snap.since) : null,
     counted: variant === 'status' || variant === 'connecting', // linked and not out of service → in RUNNING n/N
@@ -244,6 +311,10 @@ export function machineView(snapshot, lm, ctx) {
     const pcs = typeof v.partCount === 'number' && Number.isFinite(v.partCount) ? `${v.partCount.toLocaleString('en-US')} pcs` : '';
     const text = [name ? truncate(name, 22) : '', pcs].filter(Boolean).join(' · ');
     vm.program = text || null;
+    if (!vm.overridesHidden) {
+      vm.overrides = activeOverrides(v);
+      if (vm.overrides.length) vm.overrideBars = overrideBars(v);
+    }
   }
   return vm;
 }

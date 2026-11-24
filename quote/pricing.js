@@ -18,9 +18,9 @@ export const PRICES = Object.freeze({
 /** Makes, and how far Stacklight is with each (the landing page's "Your machines" section). */
 export const MAKES = Object.freeze([
   { id: 'fanuc', name: 'FANUC', status: 'ok', note: 'Confirmed: running in a production shop.' },
-  { id: 'haas', name: 'Haas', status: 'now', note: 'Verifying now. Newer controls connect over the network; older ones use a small adapter.' },
-  { id: 'okuma', name: 'Okuma', status: 'now', note: 'Verifying now. OSP-P300 and newer, through MTConnect.' },
-  { id: 'mazak', name: 'Mazak', status: 'soon', note: 'On the way. Smooth and Matrix 2 controls, through MTConnect.' },
+  { id: 'haas', name: 'Haas', status: 'soon', note: 'On the way. Newer controls connect over the network; older ones use a small serial adapter.' },
+  { id: 'okuma', name: 'Okuma', status: 'ok', note: 'Confirmed: running in a production shop, through Okuma\'s own MTConnect agent. Other Okuma controls with that agent connect the same way.' },
+  { id: 'mazak', name: 'Mazak', status: 'soon', note: 'On the way. Smooth and Matrix 2 controls, through MTConnect, the same connection that is confirmed on Okuma.' },
   { id: 'siemens', name: 'Siemens', status: 'soon', note: 'On the way. SINUMERIK controls, through OPC UA.' },
   { id: 'heidenhain', name: 'Heidenhain', status: 'soon', note: 'On the way, through MTConnect or OPC UA.' },
   { id: 'brother', name: 'Brother', status: 'soon', note: 'On the way, through MTConnect or OPC UA.' },
@@ -58,6 +58,8 @@ export function normalizeQuote(q) {
       machines,
       programTransfer: !!q.programTransfer && fanuc > 0,
       maintenance: !!q.maintenance,
+      // the box: only for a shop with no PC to spare (most run Stacklight on a Windows PC they already have)
+      box: !!q.box,
       // updates and help after the included period: renew each year automatically, or decide later (the default)
       renew: q.renew === true,
       shop: {
@@ -82,9 +84,9 @@ export function priceQuote(quote) {
     lines.push({ key, lookup: p.lookup, label: p.label, per: p.per, qty, unitCents: p.cents, totalCents: p.cents * qty, ...extra });
   };
   if (quote.plan === 'buy') add('license', n, { when: 'once' });
-  add('box', 1, { when: 'once' });
   if (quote.programTransfer && fanuc) add('programTransfer', fanuc, { when: 'once' });
   if (quote.maintenance) add('maintenance', n, { when: 'once' });
+  if (quote.box) add('box', 1, { when: 'once' });
   const onceCents = lines.reduce((s, l) => s + l.totalCents, 0);
   const monthly = quote.plan === 'monthly'
     ? { key: 'monthly', lookup: PRICES.monthly.lookup, label: PRICES.monthly.label, qty: n, unitCents: PRICES.monthly.cents, totalCents: PRICES.monthly.cents * n, months: PRICES.monthly.months }
@@ -132,15 +134,22 @@ export function encodeQuote(quote) {
 
 /** Find and read a quote code anywhere in a text (an email pasted whole). */
 export function decodeQuote(textIn) {
-  const m = /SLQ1-([A-Za-z0-9_-]{10,6000})/.exec(String(textIn ?? ''));
+  // the last code: the request's own is its last line, so a code quoted in the notes above it does not win
+  const m = [...String(textIn ?? '').matchAll(/SLQ1-([A-Za-z0-9_-]{10,20000})/g)].at(-1);
   if (!m) return { ok: false, error: 'no quote code (SLQ1-…) in the text' };
   let raw;
   try { raw = JSON.parse(b64url.decode(m[1])); } catch { return { ok: false, error: 'the quote code is damaged' }; }
   return normalizeQuote(raw);
 }
 
-/** The request as an email: a readable summary, then the code. */
-export function quoteEmail(quote, { to = 'hello@stacklight.shop', date = new Date() } = {}) {
+/** encodeURIComponent, plus ! ' ( ) * that a browser may escape anyway, so a mail link's length is what the page measures. */
+const mailEncode = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+
+/**
+ * The request as an email: a readable summary, then the code. `short` leaves out the line-by-line prices (the code
+ * has everything), for a mail link that would otherwise be too long.
+ */
+export function quoteEmail(quote, { to = 'hello@stacklight.shop', date = new Date(), short = false } = {}) {
   const p = priceQuote(quote);
   const s = quote.shop;
   const subject = `Quote request: ${s.company || s.name || 'a shop'}${s.city ? `, ${s.city}` : ''}`;
@@ -149,7 +158,8 @@ export function quoteEmail(quote, { to = 'hello@stacklight.shop', date = new Dat
   L.push(`Machines (${p.machines}):`);
   for (const m of quote.machines) L.push(`- ${m.count} x ${makeById(m.make).name}${m.model ? ` ${m.model}` : ''}`);
   L.push('', quote.plan === 'buy' ? 'Paying: own it, once' : `Paying: monthly, ${PRICES.monthly.months} payments`);
-  for (const l of p.lines) L.push(`${l.label}: ${l.qty} x ${dollars(l.unitCents)} = ${dollars(l.totalCents)}`);
+  if (short) { if (p.lines.length) L.push(`With: ${p.lines.map((l) => l.label).join('; ')}`); }
+  else for (const l of p.lines) L.push(`${l.label}: ${l.qty} x ${dollars(l.unitCents)} = ${dollars(l.totalCents)}`);
   L.push(`Due once: ${dollars(p.onceCents)}`);
   if (p.monthly) L.push(`Monthly: ${p.monthly.qty} x ${dollars(p.monthly.unitCents)} = ${dollars(p.monthly.totalCents)} a month for ${p.monthly.months} months`);
   L.push(`Updates and help from about ${updatesStart(p.updates.startsAfterMonths, date)}: ${p.updates.qty} x ${dollars(p.updates.unitCents)} = ${dollars(p.updates.yearCents)} a year, optional`);
@@ -158,5 +168,5 @@ export function quoteEmail(quote, { to = 'hello@stacklight.shop', date = new Dat
   if (quote.notes) L.push('', 'Notes:', quote.notes);
   L.push('', `Quote code (for our records): ${encodeQuote(quote)}`, `Built on stacklight.shop/quote/ on ${date.toISOString().slice(0, 10)}.`);
   const body = L.join('\n');
-  return { to, subject, body, mailto: `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}` };
+  return { to, subject, body, mailto: `mailto:${to}?subject=${mailEncode(subject)}&body=${mailEncode(body)}` };
 }

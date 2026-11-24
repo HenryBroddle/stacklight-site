@@ -13,7 +13,15 @@
 //     partsStart, partsEnd, parts,                 // part counter at both ends and the count added (null = no counter)
 //     pauses, alarms,                              // times the run paused / stopped on an alarm or E-stop
 //     outcome, endReason,                          // 'open' | 'completed' | 'aborted' | 'unknown' and why it ended
-//     invalid: null | { reason: 'scrap'|'test'|'other', note, at } }
+//     invalid: null | { reason: 'scrap'|'test'|'other', note, at },
+//     calls: [{ program, calls, ms, last }],       // programs the run called (D21), in first-call order
+//     callsMore: null | { calls, ms },             // calls of programs beyond MAX_CALLED_PROGRAMS (counted, not named)
+//     loader: null | string }                      // the loader program (a pallet main) that loaded it (D22)
+//
+// Called programs (D21): what the control executed besides the run's own program, from the "active program" it
+// reports — the shop's subprograms (M98/M198/G65 calls) and machine macros (isMacroProgram: tool and pallet changes,
+// probing). Per program: calls (a lower bound, src/machines/programCalls.js), ms = the time it was executing itself
+// (a subprogram's time leaves out the macros it called), last = when it was last called.
 
 export const RUN_OUTCOMES = Object.freeze({
   OPEN: 'open',             // still running (or paused/stopped and may resume)
@@ -45,6 +53,164 @@ export const INVALID_NOTE_MAX = 200;
 
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+// ---------------------------------------------------------------------------------------------
+// Loader programs (D22): a pallet main such as O0001 loads the part program of each pallet. On a machine where a
+// program is set as a loader (settings runs.machines.<id>.loaders), the loader is never a run: each program it
+// loads is (src/machines/programCalls.js LoadTracker).
+// ---------------------------------------------------------------------------------------------
+
+/** Most loader programs per machine. */
+export const MAX_LOADERS = 10;
+
+/**
+ * A program name compared as the controls write it: case and a trailing ".NC" ignored, and an O-number without its
+ * leading zeros ("O0001", "O1", "1" and "O00000001.NC" are one program).
+ */
+export function programId(name) {
+  if (typeof name !== 'string') return '';
+  const s = name.trim().replace(/\.NC$/i, '');
+  const m = /^O?0*(\d{1,9})$/i.exec(s);
+  return m ? `O${m[1]}` : s.toUpperCase();
+}
+
+/** True when `program` is one of the loader programs listed (`loaders`: names as entered). */
+export function isLoaderProgram(loaders, program) {
+  const id = programId(program);
+  return !!id && Array.isArray(loaders) && loaders.some((l) => programId(l) === id);
+}
+
+/** The loader programs set for a machine in the (public) settings. */
+export function loadersOf(settings, machineId) {
+  const l = settings?.runs?.machines?.[machineId]?.loaders;
+  return Array.isArray(l) ? l.filter((x) => typeof x === 'string' && x.trim()) : [];
+}
+
+// ---------------------------------------------------------------------------------------------
+// Called programs (D21)
+// ---------------------------------------------------------------------------------------------
+
+/** Programs a run itemizes in `calls`; calls of any further program only add to `callsMore`. */
+export const MAX_CALLED_PROGRAMS = 40;
+
+/**
+ * A machine macro rather than one of the shop's programs: O8000–O9999 (four digits), the numbers FANUC sets aside
+ * for the machine builder's macros, which M, G and T codes call (tool changes, pallet changes, probing cycles).
+ * The shop's eight-digit programs (O80001000, O90002000) are not macros.
+ */
+export function isMacroProgram(name) {
+  return typeof name === 'string' && /^O?0*[89]\d{3}(\.NC)?$/i.test(name.trim());
+}
+
+const count = (v) => (finite(v) && v >= 0 ? Math.round(v) : 0);
+
+/** One stored called-program entry with every field in range, or null. */
+export function normalizeCall(c) {
+  if (!isObj(c) || typeof c.program !== 'string' || !c.program.trim()) return null;
+  return {
+    program: c.program.trim().slice(0, 200),
+    calls: count(c.calls),
+    ms: count(c.ms),
+    last: finite(c.last) ? c.last : null,
+  };
+}
+
+/** A run's `calls`, cleaned (at most MAX_CALLED_PROGRAMS, one entry per program). */
+export function normalizeCalls(v) {
+  const out = [];
+  const seen = new Set();
+  for (const c of Array.isArray(v) ? v : []) {
+    const n = normalizeCall(c);
+    if (!n || seen.has(n.program)) continue;
+    seen.add(n.program);
+    out.push(n);
+    if (out.length >= MAX_CALLED_PROGRAMS) break;
+  }
+  return out;
+}
+
+/** A run's `callsMore`, cleaned (null when there were none). */
+export function normalizeCallsMore(v) {
+  return isObj(v) && count(v.calls) > 0 ? { calls: count(v.calls), ms: count(v.ms) } : null;
+}
+
+/**
+ * A run's called programs, split: the shop's subprograms in first-call order, and machine macros with the most
+ * time first, with their totals.
+ */
+export function callsOf(run) {
+  const list = normalizeCalls(run?.calls);
+  const subs = list.filter((c) => !isMacroProgram(c.program));
+  const macros = list.filter((c) => isMacroProgram(c.program)).sort((a, b) => b.ms - a.ms || a.program.localeCompare(b.program));
+  return {
+    subs,
+    macros,
+    macroCalls: macros.reduce((s, c) => s + c.calls, 0),
+    macroMs: macros.reduce((s, c) => s + c.ms, 0),
+    more: normalizeCallsMore(run?.callsMore),
+  };
+}
+
+/** True when the run called `program` (any called program, macros included). */
+export function runCalled(run, program) {
+  return Array.isArray(run?.calls) && run.calls.some((c) => c?.program === program);
+}
+
+/** Key a called-program summary is grouped by (never equal to a programKey: machine ids never start with \u0001). */
+export function callKey(machineId, program) {
+  return `\u0001${machineId ?? ''}\u0000${program ?? ''}`;
+}
+
+/** The machine id and program of a callKey, or null for any other key. */
+export function parseCallKey(key) {
+  if (typeof key !== 'string' || !key.startsWith('\u0001')) return null;
+  const i = key.indexOf('\u0000');
+  return i < 0 ? null : { machineId: key.slice(1, i), program: key.slice(i + 1) };
+}
+
+/**
+ * The shop's subprograms that valid runs called: one row per machine and program, newest call first.
+ * @param {object[]} runs
+ * @returns {CallSummary[]}
+ *
+ * @typedef {Object} CallSummary
+ * @property {string} key              callKey(machineId, program)
+ * @property {string} program
+ * @property {string} machineId
+ * @property {string} machineName
+ * @property {string[]} callers        the programs whose runs called it
+ * @property {number} runs             valid runs that called it
+ * @property {number} calls            at least this many calls
+ * @property {number} ms               time it was executing (open runs: up to when they were read)
+ * @property {number|null} last        newest call
+ */
+export function summarizeCalls(runs) {
+  /** @type {Map<string, any>} */
+  const groups = new Map();
+  for (const r of Array.isArray(runs) ? runs : []) {
+    if (!isObj(r) || !isValidRun(r)) continue;
+    for (const c of callsOf(r).subs) {
+      const key = callKey(r.machineId, c.program);
+      let g = groups.get(key);
+      if (!g) {
+        g = { key, program: c.program, machineId: r.machineId ?? '', machineName: r.machineName ?? r.machineId ?? '', callers: [], runs: 0, calls: 0, ms: 0, last: null };
+        groups.set(key, g);
+      }
+      if (r.program && !g.callers.includes(r.program)) g.callers.push(r.program);
+      g.runs++;
+      g.calls += c.calls;
+      g.ms += c.ms;
+      const last = c.last ?? r.start;
+      if (finite(last) && (g.last === null || last > g.last)) g.last = last;
+    }
+  }
+  return [...groups.values()].sort((a, b) => (b.last ?? -Infinity) - (a.last ?? -Infinity) || a.program.localeCompare(b.program));
+}
+
+/** "O1234 x2 (36.0 min); O5678 x1 (0.8 min)" for the CSV. */
+function callsCsv(list) {
+  return list.map((c) => `${c.program} x${c.calls} (${(c.ms / 60000).toFixed(1)} min)`).join('; ');
+}
 
 /** True when the run counts in the report totals (not invalidated). */
 export function isValidRun(run) {
@@ -219,6 +385,9 @@ export const RUN_CSV_COLUMNS = Object.freeze([
   ['Invalid reason', (r) => (r.invalid ? INVALID_REASONS[r.invalid.reason] ?? r.invalid.reason : '')],
   ['Invalid note', (r) => (r.invalid ? r.invalid.note : '')],
   ['Invalidated at (UTC)', (r) => (r.invalid ? isoOrEmpty(r.invalid.at) : '')],
+  ['Called programs', (r) => callsCsv(callsOf(r).subs)],
+  ['Macros called', (r) => callsCsv(callsOf(r).macros)],
+  ['Loaded by', (r) => r.loader ?? ''],
 ]);
 
 /** CSV text (CRLF rows, header first) of runs. */

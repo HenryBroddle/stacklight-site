@@ -275,6 +275,10 @@ export function programSeeds(rec, { now }) {
       extras[1].modified = now - 26 * 3_600_000;
       files.find((f) => f.name === extras[1].name).modified = extras[1].modified;
     }
+    // a BACKUP folder, as shops keep one: older copies of two programs (folders in the explorer, D16 amendment)
+    for (const [i, f] of files.slice(0, 2).entries()) {
+      files.push({ name: f.name, dir: 'BACKUP', text: sampleProgram(f.name, 'BACKUP COPY', { kind, lines: 70 + i * 30 }), modified: now - (20 + i * 9) * DAY });
+    }
     out.push({ id: lm.id, name: typeof lm.name === 'string' ? lm.name : lm.id, host: lm.source.host ?? null, files, history });
   }
   return out;
@@ -509,8 +513,23 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
       // --- program transfer: simulated Data Servers ------------------------------------------
       if (read && p === '/api/programs') return json(200, programs.overview());
       if (p.startsWith('/api/programs/')) return refuse(now, 'Program transfer setup is not part of the demo.');
+      const pdir = url.searchParams.get('dir') ?? '';
       m = /^\/api\/machines\/([^/]+)\/programs$/.exec(p);
-      if (m && read) return json(200, programs.list(dec(m[1])));
+      if (m && read) return json(200, programs.list(dec(m[1]), { dir: pdir }));
+      m = /^\/api\/machines\/([^/]+)\/programs\/([^/]+)\/copy$/.exec(p);
+      if (m && method === 'POST') {
+        let body = null;
+        try { body = JSON.parse(new TextDecoder().decode(await bodyBytes(init))); } catch { /* below */ }
+        return json(200, programs.copy(dec(m[1]), dec(m[2]), { dir: pdir, toDir: body?.toDir ?? null, move: body?.move === true, replace: body?.replace === true }));
+      }
+      m = /^\/api\/machines\/([^/]+)\/program-folders$/.exec(p);
+      if (m && method === 'POST') {
+        let body = null;
+        try { body = JSON.parse(new TextDecoder().decode(await bodyBytes(init))); } catch { /* below */ }
+        return json(201, programs.makeFolder(dec(m[1]), body?.name, { dir: pdir }));
+      }
+      m = /^\/api\/machines\/([^/]+)\/program-folders\/([^/]+)$/.exec(p);
+      if (m && method === 'DELETE') return json(200, programs.removeFolder(dec(m[1]), dec(m[2]), { dir: pdir }));
       m = /^\/api\/machines\/([^/]+)\/programs-first-lines$/.exec(p);
       if (m && read) return json(200, { serverTime: now, ...programs.firstLines(dec(m[1])) });
       m = /^\/api\/machines\/([^/]+)\/programs-history$/.exec(p);
@@ -522,15 +541,15 @@ export function install(win, { recordingUrl = new URL('recording.json', import.m
         const id = dec(m[1]);
         const name = dec(m[2]);
         if (method === 'GET') {
-          const r = programs.download(id, name);
+          const r = programs.download(id, name, { dir: pdir });
           return new Response(r.data, { status: 200, headers: { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${r.name}"`, 'Cache-Control': 'no-store' } });
         }
         if (method === 'PUT') {
           const replace = ['1', 'true', 'yes'].includes(String(url.searchParams.get('replace') ?? '').toLowerCase());
-          const r = programs.upload(id, name, await bodyBytes(init), { replace });
+          const r = programs.upload(id, name, await bodyBytes(init), { replace, dir: pdir });
           return json(r.action === 'sent' ? 201 : 200, r);
         }
-        if (method === 'DELETE') return json(200, programs.remove(id, name));
+        if (method === 'DELETE') return json(200, programs.remove(id, name, { dir: pdir }));
       }
 
       // --- maintenance: the product's service, its plan in this browser ------------------------

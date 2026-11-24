@@ -148,6 +148,9 @@ const CORE_PRIO = 2;          // icon 0, word 1, timer 2
 const NON_CORE_MIN_SCALE = 0.72;
 const EDITOR_NAME_MIN = 11;   // px: smallest machine name on an editor tile (a desk screen, read up close)
 const EDITOR_PLATE_SIZE = 14; // px: name plate text in the editor
+// Override chart colours (D25), on the dark plate: grey at 100 %, the warning yellow below, red for the feed at 0 %
+// (in cycle and nothing moves), blue above 100 %. Height and position back up the colour.
+const OVERRIDE_CHART = Object.freeze({ full: '#9aa5b4', low: HAZARD.yellow, stop: '#ff6b6b', over: '#5ab8ff', track: 'rgba(255,255,255,0.16)', edge: 'rgba(255,255,255,0.85)' });
 const PHONE_PLATE_SIZES = [13, 11]; // px: name plate text on a phone-sized plan (opts.compact)
 
 /**
@@ -801,6 +804,7 @@ export function createFloorplan(svg, options = {}) {
       const sig = JSON.stringify([
         vm.status, vm.variant, vm.word, vm.fill, vm.ink, vm.icon, vm.reason, vm.timer, vm.down, vm.fault && [vm.fault.code, vm.fault.message, vm.fault.more],
         vm.program, vm.note, vm.badge, vm.attention.level, vm.name, pulse, stale, mode, opts.theme, r4(ppu), opts.scale.k, JSON.stringify(t.machine),
+        (vm.overrideBars ?? []).map((b) => b.pct), (vm.overrides ?? []).map((o) => o.text),
       ]);
       if (sig === t.sig) continue;
       const onset = t.status !== null && t.status !== vm.status;
@@ -881,15 +885,38 @@ export function createFloorplan(svg, options = {}) {
     t.nameInTile = !!nameLine && nameLine.text === nameLine.fullText
       && (!nameLine.rows || nameLine.rows.join(' ') === nameLine.fullText.split(/\s+/).filter(Boolean).join(' '));
 
-    // condition badge (warning / fault while running) at the top-right corner
-    if (vm.badge && vm.variant === 'status' && Math.min(m.w, m.h) * ppu >= 3.2 * s.floor) {
-      const r = Math.max(12, 15 * k);
-      const rad = (rot * Math.PI) / 180;
+    // condition mark at the top-right corner: a fault while running (ring colour, triangle), or an active warning
+    // (D19: a yellow "!" with a thin dark border, readable on every status colour, the yellow PAUSED included)
+    const markRoom = vm.variant === 'status' && Math.min(m.w, m.h) * ppu >= 3.2 * s.floor;
+    const r = Math.max(12, 15 * k);
+    const rad = (rot * Math.PI) / 180;
+    if (vm.badge && markRoom) {
       const ox = (m.w * ppu) / 2 - r * 0.15, oy = -(m.h * ppu) / 2 + r * 0.15;
       const bx = ox * Math.cos(rad) - oy * Math.sin(rad), by = ox * Math.sin(rad) + oy * Math.cos(rad);
       const badge = el('g', { class: `badge badge-${vm.badge}`, transform: `translate(${r4(cx)} ${r4(cy)}) scale(${r4(1 / ppu)}) translate(${r4(bx)} ${r4(by)})`, 'pointer-events': 'none' }, g);
-      el('circle', { cx: 0, cy: 0, r, fill: T.ring, stroke: T.bg, 'stroke-width': 2 * k }, badge);
-      badge.append(iconGroup('triangle', { size: r * 1.15, color: T.ringInk, x: -r * 0.575, y: -r * 0.62 }));
+      if (vm.badge === 'warning') {
+        el('circle', { cx: 0, cy: 0, r, fill: HAZARD.yellow, stroke: HAZARD.black, 'stroke-width': Math.max(1.25, 1.5 * k) }, badge);
+        const w = r * 0.28;
+        el('rect', { x: -w / 2, y: -r * 0.62, width: w, height: r * 0.78, rx: w / 2, fill: HAZARD.black }, badge);
+        el('circle', { cx: 0, cy: r * 0.45, r: w * 0.62, fill: HAZARD.black }, badge);
+      } else {
+        el('circle', { cx: 0, cy: 0, r, fill: T.ring, stroke: T.bg, 'stroke-width': 2 * k }, badge);
+        badge.append(iconGroup('triangle', { size: r * 1.15, color: T.ringInk, x: -r * 0.575, y: -r * 0.62 }));
+      }
+    }
+
+    // override chart at the top-left corner (D25): while in cycle with an override away from 100 %, a bar for each
+    // override the machine reports (feed, rapid, spindle), filled to its percentage and coloured by it, on a dark
+    // plate that reads on every status colour. A narrow tile that also has the mark puts it at the bottom-left.
+    if (vm.overrideBars?.length && markRoom) {
+      const chart = overrideChart(vm.overrideBars, r * 2);
+      const out = chart.h * 0.25; // how far it reaches past the tile's edges: mostly on the tile, marking its corner
+      const ox = -(m.w * ppu) / 2 + chart.w / 2 - out;
+      const low = !!vm.badge && m.w * ppu < chart.w + 2 * r + 8 * k;
+      const oy = low ? (m.h * ppu) / 2 - chart.h / 2 + out : -(m.h * ppu) / 2 + chart.h / 2 - out;
+      const bx = ox * Math.cos(rad) - oy * Math.sin(rad), by = ox * Math.sin(rad) + oy * Math.cos(rad);
+      chart.g.setAttribute('transform', `translate(${r4(cx)} ${r4(cy)}) scale(${r4(1 / ppu)}) translate(${r4(bx)} ${r4(by)})`);
+      g.append(chart.g);
     }
 
     // accessibility
@@ -900,12 +927,36 @@ export function createFloorplan(svg, options = {}) {
       g.removeAttribute('tabindex');
       g.removeAttribute('role');
     }
-    const label = [vm.name, vm.word, vm.reason, vm.timer?.text, vm.fault ? `${vm.fault.code} ${vm.fault.message}` : null, vm.attention.level ? `Needs attention: ${vm.attention.reason}` : null]
+    const label = [vm.name, vm.word, vm.reason, vm.timer?.text, vm.fault ? `${vm.fault.code} ${vm.fault.message}` : null, vm.overrides?.length ? `Overrides ${vm.overrides.map((o) => o.text).join(', ')}` : null, vm.attention.level ? `Needs attention: ${vm.attention.reason}` : null]
       .filter(Boolean).join(', ');
     g.setAttribute('aria-label', label);
     let title = g.querySelector(':scope > title');
     if (!title) title = el('title', {}, g);
     title.textContent = label;
+  }
+
+  /**
+   * A tile's override chart (D25), centred on 0,0 in screen px, `h` tall: a track per override, its bar filled to
+   * the percentage (100 % = the track's top; above 100 % it reaches past it), coloured by level. The feed at 0 % is a
+   * stub; any other bar below 100 % is at least a little taller than the stub, so height never ranks 5 % under 0 %.
+   */
+  function overrideChart(bars, h) {
+    const bw = h * 0.2, gap = h * 0.12, padX = h * 0.2, padY = h * 0.2;
+    const w = 2 * padX + bars.length * bw + (bars.length - 1) * gap;
+    const trackH = h - 2 * padY;
+    const g = el('g', { class: 'ovr-chart', 'pointer-events': 'none', 'aria-hidden': 'true' });
+    const edge = Math.max(1.25, h * 0.05);
+    el('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: h * 0.2, fill: HAZARD.black, stroke: OVERRIDE_CHART.edge, 'stroke-width': edge, class: 'ovr-plate' }, g);
+    const bottom = h / 2 - padY;
+    const stub = Math.max(2, trackH * 0.12);
+    const tallest = trackH + padY - Math.max(1.5, edge / 2 + 0.75); // above 100 %: up to just under the plate's edge
+    bars.forEach((b, i) => {
+      const x = -w / 2 + padX + i * (bw + gap);
+      el('rect', { x, y: bottom - trackH, width: bw, height: trackH, rx: bw * 0.3, fill: OVERRIDE_CHART.track, class: 'ovr-track' }, g);
+      const fillH = b.level === 'stop' ? stub : Math.max(b.level === 'low' ? stub + 1 : 0, Math.min(trackH * (b.pct / 100), tallest));
+      el('rect', { x, y: bottom - fillH, width: bw, height: fillH, rx: bw * 0.3, fill: OVERRIDE_CHART[b.level], class: `ovr-bar ovr-${b.level}`, 'data-key': b.key, 'data-pct': b.pct }, g);
+    });
+    return { g, w, h };
   }
 
   /** Lay out and draw the tile content; returns the lines drawn. */

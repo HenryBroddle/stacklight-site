@@ -5,6 +5,7 @@
 import { iconSvg } from './icons.js';
 import { CHIPS, familyCounts, compareVm, detailLine, paletteFor, formatTimeOfDay } from './statusStyle.js';
 import { boardSubline, attentionRows, keepsDetail } from './boardModel.js';
+import { setOverrideLabel, overrideSizingText } from './overrideLabel.js';
 
 const MAX_ALL_ROWS = 8;
 const DENSITIES = ['roomy', 'normal', 'snug', 'cozy', 'compact', 'tight'];
@@ -119,21 +120,34 @@ export function createBoard(headEl, rowsEl, { onSelect } = {}) {
       const badge = h('span', 'row-badge');
       const badgeIcon = h('span', 'row-icon');
       const word = h('span', 'row-word');
-      badge.append(badgeIcon, word);
+      // an active warning (D19): a yellow "!" beside the status word
+      const warn = h('span', 'warn-mark', '!');
+      warn.hidden = true;
+      warn.title = 'Warning on the machine';
+      badge.append(badgeIcon, word, warn);
       const timer = h('span', 'row-timer');
       const timerText = h('span', 'row-timer-text');
       timer.append(timerText);
+      // the override label on boards with no second line (D25): its own grid item over the flexible name column, left
+      // of the timer, so it never widens the columns the rows share
+      const ovrTop = h('span', 'row-ovr row-ovr-top');
+      ovrTop.hidden = true;
       const name = h('span', 'row-name');
       const detail = h('span', 'row-detail');
+      // the second line's right end: "down 42m", and overrides away from 100 % while in cycle (D25)
       const down = h('span', 'row-down');
+      const downText = h('span', 'row-down-text');
+      const ovr = h('span', 'row-ovr');
+      ovr.hidden = true;
+      down.append(downText, ovr);
       // phone cards only (data-density="phone"): program, readings and today's runs, one line each
       const facts = h('span', 'row-facts');
       const factProgram = h('span', 'fact fact-program');
       const factReadings = h('span', 'fact fact-readings');
       const factToday = h('span', 'fact fact-today');
       facts.append(factProgram, factReadings, factToday);
-      li.append(bar, badge, timer, name, detail, down, facts);
-      r = { li, parts: { bar, badge, badgeIcon, word, timer, timerText, name, detail, down, facts, factProgram, factReadings, factToday }, sig: '', icon: '' };
+      li.append(bar, badge, timer, name, ovrTop, detail, down, facts);
+      r = { li, parts: { bar, badge, badgeIcon, word, warn, timer, timerText, name, detail, down, downText, ovr, ovrTop, facts, factProgram, factReadings, factToday }, sig: '', icon: '' };
       rows.set(vm.id, r);
     }
     return r;
@@ -143,10 +157,12 @@ export function createBoard(headEl, rowsEl, { onSelect } = {}) {
     const { li, parts } = r;
     // phone cards show the program on a line of its own, so the detail keeps only the fault or reason
     const detail = compact ? detailLine({ ...vm, program: null }) : detailLine(vm);
-    const sig = JSON.stringify([vm.status, vm.variant, vm.word, vm.fill, vm.ink, vm.icon, vm.attention.level, vm.timer, vm.down, vm.name, detail, kiosk, theme, compact, vm.facts, vm.today]);
+    const ovr = (vm.overrides ?? []).map((o) => o.text);
+    const motion = document.documentElement.dataset.motion ?? 'full';
+    const sig = JSON.stringify([vm.status, vm.variant, vm.word, vm.fill, vm.ink, vm.icon, vm.attention.level, vm.timer, vm.down, vm.name, detail, kiosk, theme, compact, vm.facts, vm.today, vm.badge, ovr, motion]);
     if (sig === r.sig) return;
     r.sig = sig;
-    li.className = `row st-${vm.status} v-${vm.variant} att-${vm.attention.level}${vm.timer?.overdue ? ' overdue' : ''}${detail || vm.down ? ' has-detail' : ''}${keepsDetail(vm, detail) ? ' keep-detail' : ''}`;
+    li.className = `row st-${vm.status} v-${vm.variant} att-${vm.attention.level}${vm.timer?.overdue ? ' overdue' : ''}${detail || vm.down || ovr.length ? ' has-detail' : ''}${keepsDetail(vm, detail) ? ' keep-detail' : ''}`;
     li.style.setProperty('--fill', vm.fill ?? 'transparent');
     li.style.setProperty('--ink', vm.ink);
     li.style.setProperty('--border', vm.borderColor ?? vm.fill ?? 'transparent');
@@ -155,14 +171,25 @@ export function createBoard(headEl, rowsEl, { onSelect } = {}) {
       parts.badgeIcon.replaceChildren(iconSvg(vm.icon, { size: null }));
     }
     setText(parts.word, vm.variant === 'service' ? 'OUT OF SERVICE' : vm.word);
+    parts.warn.hidden = vm.badge !== 'warning';
     setText(parts.name, vm.name);
     const timerText = vm.timer ? (vm.timer.overdue ? `! ${vm.timer.text}` : vm.timer.text) : '';
     setText(parts.timerText, timerText);
     parts.timer.hidden = !timerText;
     parts.timer.classList.toggle('timer-text', !!vm.timer && vm.timer.mode !== 'elapsed');
     setText(parts.detail, detail);
-    setText(parts.down, vm.down?.text ?? '');
-    parts.down.hidden = !vm.down;
+    setText(parts.downText, vm.down?.text ?? '');
+    parts.downText.hidden = !vm.down;
+    // overrides (D25): one label, stepping through them (overrideLabel.js), sized for its longest text. It sits at the
+    // end of the second line, or beside the timer on boards with no second line (CSS shows one of the two).
+    for (const el of [parts.ovr, parts.ovrTop]) {
+      setOverrideLabel(el, ovr);
+      el.hidden = !ovr.length;
+      // every text it steps through, laid out invisibly (CSS ::after): the label is as wide as the widest, always
+      el.dataset.size = motion === 'full' ? ovr.join('\n') : overrideSizingText(ovr, motion);
+      el.title = ovr.length ? `Overrides: ${ovr.join(' · ')}` : '';
+    }
+    parts.down.hidden = !vm.down && !ovr.length;
     const facts = compact && vm.variant !== 'unbound' ? vm.facts ?? {} : {};
     setText(parts.factProgram, facts.program ?? '');
     setText(parts.factReadings, facts.readings ?? '');
@@ -178,7 +205,7 @@ export function createBoard(headEl, rowsEl, { onSelect } = {}) {
       li.removeAttribute('tabindex');
       li.removeAttribute('role');
     }
-    li.setAttribute('aria-label', [vm.name, vm.word, vm.timer?.text, detailLine(vm), vm.attention.level ? `needs attention: ${vm.attention.reason}` : ''].filter(Boolean).join(', '));
+    li.setAttribute('aria-label', [vm.name, vm.word, vm.badge === 'warning' ? 'warning' : '', vm.timer?.text, detailLine(vm), ovr.length ? `overrides ${ovr.join(', ')}` : '', vm.attention.level ? `needs attention: ${vm.attention.reason}` : ''].filter(Boolean).join(', '));
   }
 
   /**

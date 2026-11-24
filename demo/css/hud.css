@@ -376,6 +376,15 @@ button, input, select { font: inherit; color: inherit; }
 .row-icon { display: flex; flex: none; }
 .row-icon .icon { width: 0.78em; height: 0.78em; }
 .row-word { overflow: hidden; text-overflow: ellipsis; }
+/* an active warning (D19): a yellow "!" with a thin dark border beside the status word (board rows, drawer head) */
+.warn-mark {
+  display: inline-flex; flex: none; align-items: center; justify-content: center;
+  width: 1.2em; height: 1.2em; margin-left: 0.18em; border-radius: 50%;
+  background: #ffd400; color: #0b0f14; box-shadow: 0 0 0 max(1px, calc(1.5px * var(--k))) #0b0f14;
+  font-family: var(--font-display); font-weight: 800; font-size: 0.7em; line-height: 1; letter-spacing: 0;
+}
+.warn-mark[hidden] { display: none; }
+.warn-setting { margin-top: calc(12px * var(--k)); }
 .row-timer {
   grid-area: timer;
   justify-self: end;
@@ -420,12 +429,38 @@ button, input, select { font: inherit; color: inherit; }
   grid-area: down;
   justify-self: end;
   align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
   font-family: var(--font-display);
   font-size: var(--fs-code);
   color: var(--text-muted);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.row-down[hidden], .row-down-text[hidden] { display: none; }
+/* overrides away from 100 % while in cycle (D25): a quiet outlined label, not a status colour; it steps through
+   them (overrideLabel.js) at a fixed width */
+.row-ovr {
+  display: inline-block;
+  padding: 0.04em 0.5em;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 max(1px, calc(1.5px * var(--k))) currentColor;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.row-ovr[hidden] { display: none; }
+/* the texts it steps through, invisible and flat: the label keeps the width of the widest */
+.row-ovr::after { content: attr(data-size); display: block; height: 0; overflow: hidden; visibility: hidden; white-space: pre; }
+/* boards with no second line (compact, tight): the label sits at the right end of the name (names on their own line:
+   above the timer; one-line rows: left of the timer, over the end of a long name, on the row's background). It spans
+   the flexible name column, so it never widens the badge and timer columns all rows share. */
+.row-ovr-top { display: none; z-index: 1; align-self: center; justify-self: end; font-family: var(--font-display); font-size: calc(var(--fs-code) * 0.82); background: var(--surface); }
+:root:not(.kiosk) .row:hover .row-ovr-top { background: var(--surface-2); }
+.board-rows[data-density="compact"] .row-ovr-top:not([hidden]), .board-rows[data-density="tight"] .row-ovr-top:not([hidden]) { display: inline-block; grid-column: 2; grid-row: 1; }
+.board-rows[data-names="line"][data-density="compact"] .row-ovr-top:not([hidden]), .board-rows[data-names="line"][data-density="tight"] .row-ovr-top:not([hidden]) { grid-column: 1 / -1; grid-row: 1; }
 /* status variants */
 .row.st-ESTOP .row-badge { box-shadow: inset 0 0 0 calc(5px * var(--k)) #ffd400; padding-left: 0.3em; }
 .row.st-ESTOP .row-bar { background: repeating-linear-gradient(45deg, #ffd400 0 calc(8px * var(--k)), #0b0f14 calc(8px * var(--k)) calc(16px * var(--k))); }
@@ -710,6 +745,11 @@ span.lvl-warning { background: transparent; color: var(--text); box-shadow: inse
 .runs-table .prog { min-width: 9em; }
 .runs-table .prog-name { font-weight: 700; overflow-wrap: anywhere; }
 .runs-table .prog-cmt { font-size: 0.88em; }
+.runs-table .prog-calls, .runs-table .prog-macros { margin-top: 0.2em; overflow-wrap: anywhere; }
+.runs-loaders { margin: 0 0 0.6em; }
+.runs-loaders p { margin: 0.2em 0; }
+.runs-loaders .btn { margin-left: 0.3em; }
+.loader-form { margin: 0 0 0.8em; }
 .small { font-size: 0.85em; }
 .prog-row { cursor: pointer; }
 .prog-row:hover { background: var(--surface-2); }
@@ -788,12 +828,16 @@ span.lvl-warning { background: transparent; color: var(--text); box-shadow: inse
 .prog-row.in-use .prog-name .icon { color: var(--run, #12b886); }
 .prog-cmt { max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prog-line { max-width: 30em; font-variant-numeric: lining-nums tabular-nums; }
+/* the preview gets what the other columns leave, so long program names never push the actions past the edge */
+.prog-table td.prog-line { width: 100%; max-width: 0; }
 .prog-tags { display: inline-flex; gap: 0.4em; margin-right: 0.5em; vertical-align: middle; }
 .prog-tag { padding: 0.1em 0.5em; border-radius: 4px; font-size: 0.8em; font-weight: 700; }
 .prog-tag.in-use { background: var(--run, #12b886); color: #0b0f14; font-family: var(--font-display); letter-spacing: 0.06em; }
 .prog-tag.fresh { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
 .prog-more { min-width: 44px; min-height: 44px; justify-content: center; }
 .prog-menu { position: absolute; right: 0; top: calc(100% - 4px); z-index: 5; display: grid; gap: 2px; width: 16em; padding: 6px; border-radius: 8px; background: var(--surface-2); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45), inset 0 0 0 1px var(--line); text-align: left; }
+/* the open menu sits on the drawer (placed by programsPanel.js), not in the list that scrolls */
+.prog-menu.floating { position: fixed; right: auto; z-index: 20; max-height: calc(100vh - 16px); overflow-y: auto; }
 .prog-menu-item { width: 100%; min-height: 44px; border: 0; background: transparent; justify-content: flex-start; }
 .prog-menu-item:hover { background: var(--surface); }
 .prog-menu-item.muted { color: var(--text-muted); }
@@ -1001,12 +1045,19 @@ textarea.mt-input { width: 100%; resize: vertical; }
 .kiosk .actions { display: none; }
 /* the top bar's Text menu (text size on this screen) */
 .text-menu {
-  position: fixed; z-index: 60; display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  position: fixed; z-index: 60; display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 8px 10px;
   border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4); font-size: max(15px, calc(16px * var(--k)));
 }
 .text-menu .text-step { min-width: 3em; font-family: var(--font-display); font-weight: 600; letter-spacing: 0.02em; }
 .text-menu .text-value { min-width: 3.4em; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+.text-menu-row { display: flex; align-items: center; gap: 8px; }
+.text-menu-row[hidden] { display: none; }
+.text-menu-label { min-width: 4.2em; color: var(--text-muted); font-size: 0.85em; letter-spacing: 0.06em; text-transform: uppercase; }
+.text-menu .layout-choice, .text-menu .theme-choice { flex: 1; }
+.text-menu .layout-choice.on, .text-menu .theme-choice.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.text-menu .theme-choice { display: inline-flex; align-items: center; justify-content: center; gap: 0.35em; }
+.text-menu .theme-choice .icon { width: 1em; height: 1em; }
 .kiosk .board-rows { scrollbar-width: none; }
 .kiosk .feed { display: none; }
 
@@ -1026,6 +1077,20 @@ textarea.mt-input { width: 100%; resize: vertical; }
 .stacked .actions .btn-label { display: none; }
 .topbar-compact .actions .btn-label { display: none; }
 .topbar-compact .topbar-right { gap: calc(14px * var(--k)); }
+/* Portrait (top bar Display → Layout, D4 amendment 2026-11-20): the drawers open as a sheet over the summary and the
+   machine rows, from the plan's bottom edge (--sheet-top, app.js layoutGeometry) to the bottom of the screen, so the
+   plan stays in view and a machine's details replace the whole list */
+:root.portrait .drawer {
+  top: var(--sheet-top, 50vh);
+  left: var(--safe);
+  right: var(--safe);
+  bottom: var(--safe);
+  width: auto;
+  border-left: 0;
+  border-top: 1px solid var(--line);
+  border-radius: calc(10px * var(--k-screen, 1)) calc(10px * var(--k-screen, 1)) 0 0;
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.35);
+}
 .stacked .drawer { top: 0; width: 100vw; }
 /* panels (details, run report, discovery) are read up close on a phone: desk-sized type, not the TV scale (k ≈ 0.5
    there, which made their text about 8 px) */
@@ -1036,3 +1101,54 @@ textarea.mt-input { width: 100%; resize: vertical; }
   .chips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .noscript { padding: 2em; font-family: var(--font-display); font-size: 24px; }
+
+/* programs dragged from the PC onto the dashboard (public/js/fileDrop.js, DECISIONS D16 amendment): the machines that
+   take files glow in the accent colour, the one under the pointer more strongly, and the others fade while the drag
+   lasts. Data attributes, because the plan and the board rewrite their classes on every repaint. */
+.files-dragging .floorplan .machine:not([data-drop]) { opacity: 0.4; }
+.files-dragging .board-rows .row:not([data-drop]) { opacity: 0.45; }
+.floorplan .machine[data-drop="ok"] { filter: drop-shadow(0 0 calc(5px * var(--k)) var(--accent)); }
+/* the target: an accent border on the tile itself (screen pixels, whatever the plan's scale) and a glow */
+.floorplan .machine[data-drop="target"] { filter: drop-shadow(0 0 calc(4px * var(--k)) var(--accent)) drop-shadow(0 0 calc(12px * var(--k)) var(--accent)); }
+.floorplan .machine[data-drop="target"] .tile-fill { stroke: var(--accent); stroke-width: calc(8px * var(--k)); vector-effect: non-scaling-stroke; }
+.board-rows .row[data-drop="ok"] { box-shadow: inset 0 0 0 calc(2px * var(--k)) var(--accent); }
+.board-rows .row[data-drop="target"] { outline: calc(4px * var(--k)) dashed var(--accent); outline-offset: calc(3px * var(--k)); box-shadow: inset 0 0 0 calc(2px * var(--k)) var(--accent); }
+
+/* program folders (public/js/programsPanel.js, DECISIONS D16 amendment 2026-11-20): the path bar and folder rows */
+.prog-path { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3em; margin: calc(10px * var(--k)) 0 0; font-weight: 600; }
+.prog-path .icon { width: 1.05em; height: 1.05em; margin-right: 0.35em; vertical-align: -0.16em; color: var(--text-muted); }
+.prog-path-part { padding: 0.15em 0.4em; border: 0; border-radius: 4px; background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
+.prog-path-part:hover { background: var(--surface-2); text-decoration: underline; }
+.prog-path-part:focus-visible { outline: calc(3px * var(--k)) solid var(--accent); outline-offset: 1px; }
+.prog-path-here { padding: 0.15em 0.4em; }
+.prog-path-sep { color: var(--text-muted); }
+.prog-path .prog-new-folder { margin-left: auto; font-weight: 500; }
+.prog-folder-row { cursor: pointer; }
+.prog-folder-row:hover, .prog-folder-row.menu-open { background: var(--surface-2); }
+.prog-folder-row:focus-visible { outline: calc(3px * var(--k)) solid var(--accent); outline-offset: -3px; }
+.prog-folder-row .prog-name .icon { color: var(--accent); }
+.prog-up .prog-name { font-weight: 600; color: var(--text-muted); }
+.prog-up .prog-name .icon { color: var(--text-muted); }
+.prog-field { display: block; margin: 0.6em 0 0.3em; }
+.prog-field > span { display: block; margin-bottom: 0.35em; color: var(--text-muted); font-size: 0.92em; }
+.prog-field input { width: 100%; padding: 0.55em 0.7em; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font: inherit; }
+/* a folder row, the Up row or a part of the path bar under something dragged: files from the PC or a program */
+.prog-folder-row.drop-into, .prog-path-part.drop-into { background: var(--surface-2); box-shadow: inset 0 0 0 calc(2px * var(--k)) var(--accent); }
+.prog-path-part.drop-into { text-decoration: none; }
+.prog-row[draggable="true"] { cursor: grab; }
+.prog-body.dragging-program .prog-folder-row .prog-name .icon { color: var(--accent); }
+/* the folder picker (Copy to folder…, Move to folder…) */
+.prog-picker-path { margin: 0.4em 0 0.6em; font-weight: 600; }
+.prog-picker-list { display: flex; flex-direction: column; gap: 0.3em; max-height: 50vh; overflow-y: auto; min-width: 22em; }
+.prog-picker-item { display: flex; align-items: center; gap: 0.5em; width: 100%; padding: 0.55em 0.7em; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.prog-picker-item:hover { border-color: var(--accent); }
+.prog-picker-item .icon { width: 1.05em; height: 1.05em; color: var(--accent); }
+
+/* names for a machine's FANUC messages (public/js/detail.js, D19 amendment) */
+.msg-names { margin-top: calc(14px * var(--k)); padding: 0.8em 1em; border-radius: 8px; background: var(--surface-2); }
+.msg-names p { margin: 0.3em 0 0.6em; }
+.msg-names-list { display: flex; flex-direction: column; gap: 0.35em; margin-bottom: 0.6em; }
+.msg-names-row { display: grid; grid-template-columns: 5em minmax(0, 1fr) auto auto; align-items: center; gap: 0.6em; }
+.msg-names-row .code { font-weight: 700; font-variant-numeric: tabular-nums; }
+.msg-names-text { overflow-wrap: anywhere; }
+.conds .msg-name-btn { margin-left: 0.4em; padding: 0.1em 0.5em; font-size: 0.8em; }

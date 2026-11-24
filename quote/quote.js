@@ -42,7 +42,7 @@ function readQuote() {
   const shop = Object.fromEntries(FIELDS.filter((f) => f !== 'notes').map((f) => [f, $(f).value]));
   return {
     plan: document.querySelector('input[name="plan"]:checked')?.value,
-    machines, programTransfer: $('pt').checked, maintenance: $('mb').checked, shop, notes: $('notes').value,
+    machines, programTransfer: $('pt').checked, maintenance: $('mb').checked, box: $('box').checked, shop, notes: $('notes').value,
     renew: document.querySelector('input[name="renew"]:checked')?.value === 'auto',
   };
 }
@@ -108,15 +108,29 @@ function update() {
   const email = $('email').value.trim();
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const ready = !!current && emailOk;
+  const link = ready ? mailLink(current) : null;
   const missing = $('missing');
-  missing.hidden = ready;
-  missing.textContent = !current ? 'Add your machines to send the request.' : !emailOk ? 'Add your email so we can reply.' : '';
+  missing.hidden = !!link;
+  missing.textContent = !current ? (norm.error === 'add at least one machine' ? 'Add your machines to send the request.' : `To send the request: ${norm.error}.`)
+    : !emailOk ? 'Add your email so we can reply.'
+    : 'This request is too long for an email link. Copy the request and paste it into an email to hello@stacklight.shop.';
   const send = $('send');
-  send.setAttribute('aria-disabled', String(!ready));
-  send.classList.toggle('q-disabled', !ready);
-  send.href = ready ? quoteEmail(current).mailto : '#';
+  send.setAttribute('aria-disabled', String(!link));
+  send.classList.toggle('q-disabled', !link);
+  send.href = link ?? '#';
   $('copy').disabled = !ready;
   saveDraft(raw);
+}
+
+/** Chrome and Edge on Windows do nothing at all with a mail link longer than 2,048 characters. */
+const MAILTO_MAX = 2000;
+/** The request as a mail link: the full email, else a shorter one without the price breakdown, else none (copy it). */
+function mailLink(q) {
+  for (const short of [false, true]) {
+    const m = quoteEmail(q, { short });
+    if (m.mailto.length <= MAILTO_MAX) return m.mailto;
+  }
+  return null;
 }
 
 function saveDraft(raw) {
@@ -160,6 +174,7 @@ if (draft && Array.isArray(draft.machines) && draft.machines.length) {
   if (plan) plan.checked = true;
   $('pt').checked = !!draft.programTransfer;
   $('mb').checked = !!draft.maintenance;
+  $('box').checked = !!draft.box;
   const renew = document.querySelector(`input[name="renew"][value="${draft.renew === true ? 'auto' : 'later'}"]`);
   if (renew) renew.checked = true;
   for (const f of FIELDS) if (typeof (f === 'notes' ? draft.notes : draft.shop?.[f]) === 'string') $(f).value = f === 'notes' ? draft.notes : draft.shop[f];

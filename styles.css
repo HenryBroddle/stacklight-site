@@ -93,6 +93,7 @@ section > .wrap > .lede { margin-bottom: 34px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
 .card h3 { margin-bottom: 10px; }
 .card p { color: var(--steel); margin: 0; }
+.card h3 .addon { display: inline-block; vertical-align: 3px; margin-left: 0; padding: 1px 7px 2px; border: 1px solid var(--line); border-radius: 4px; font-size: 12px; font-weight: 500; letter-spacing: .1em; color: var(--steel); }
 
 /* status key under "what it shows" */
 .key { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
